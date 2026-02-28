@@ -1,0 +1,137 @@
+{
+  "projectType": "framework",
+  "projectName": "Laravel Modular",
+  "projectDescription": "A module system for Laravel applications that uses Composer path repositories and Laravel package discovery for better organization.",
+  "theme": "maple",
+  "primaryColor": "#FF2D20",
+  "lightColor": "#FF6B54",
+  "darkColor": "#CC2417",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/modules",
+              "concepts/plugins",
+              "concepts/module-structure"
+            ]
+          },
+          {
+            "group": "Creating Modules",
+            "pages": [
+              "guides/creating-modules",
+              "guides/module-components",
+              "guides/module-routing",
+              "guides/module-views",
+              "guides/module-migrations",
+              "guides/module-factories",
+              "guides/customizing-stubs"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/plugin-system",
+              "advanced/auto-discovery",
+              "advanced/namespace-configuration",
+              "advanced/ide-integration"
+            ]
+          },
+          {
+            "group": "Migration",
+            "pages": [
+              "migration/from-nwidart",
+              "migration/upgrading"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI Reference",
+        "groups": [
+          {
+            "group": "Module Commands",
+            "pages": [
+              "cli/make-module",
+              "cli/modules-list",
+              "cli/modules-cache",
+              "cli/modules-clear",
+              "cli/modules-sync"
+            ]
+          },
+          {
+            "group": "Make Commands",
+            "pages": [
+              "cli/make-commands-overview",
+              "cli/make-controller",
+              "cli/make-model",
+              "cli/make-migration",
+              "cli/make-provider",
+              "cli/make-command"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/module-registry",
+              "api/module-config",
+              "api/plugin-registry",
+              "api/modules-facade"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "api/plugins/artisan-plugin",
+              "api/plugins/blade-plugin",
+              "api/plugins/events-plugin",
+              "api/plugins/migrator-plugin",
+              "api/plugins/routes-plugin",
+              "api/plugins/translator-plugin"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Modular architecture for organizing large Laravel applications",
+    "Seamless integration with existing Laravel conventions",
+    "Plugin system for extending module functionality",
+    "Auto-discovery of commands, migrations, views, and components",
+    "Enhanced Artisan commands with --module option",
+    "Customizable module scaffolding with stubs",
+    "IDE integration support (PhpStorm)",
+    "Module caching for performance"
+  ],
+  "publicApiSurface": [
+    "php artisan make:module",
+    "php artisan modules:list",
+    "php artisan modules:cache",
+    "php artisan modules:clear",
+    "php artisan modules:sync",
+    "php artisan make:* --module=<name>",
+    "InterNACHI\\Modular\\Support\\Facades\\Modules",
+    "InterNACHI\\Modular\\Support\\ModuleRegistry",
+    "InterNACHI\\Modular\\Support\\ModuleConfig",
+    "InterNACHI\\Modular\\PluginRegistry",
+    "InterNACHI\\Modular\\Plugins\\Plugin"
+  ]
+}
