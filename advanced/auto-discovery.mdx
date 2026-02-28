@@ -1,0 +1,520 @@
+---
+title: Auto-Discovery
+description: Automatic registration of commands, migrations, blade components, events, and policies
+---
+
+Laravel Modular automatically discovers and registers various resources from your modules without requiring manual registration. This keeps your modules clean and self-contained.
+
+## Overview
+
+Auto-discovery is powered by the [Plugin System](/advanced/plugin-system). Each type of resource has a dedicated plugin that scans module directories and registers discovered items with Laravel.
+
+<Info>
+All auto-discovery happens during the application boot phase, so your module resources are available immediately.
+</Info>
+
+## Artisan Commands
+
+Artisan commands placed in `src/Console/Commands` are automatically discovered and registered.
+
+### Directory Structure
+
+```
+app-modules/Blog/
+└── src/
+    └── Console/
+        └── Commands/
+            ├── PublishPostCommand.php
+            └── ArchivePostCommand.php
+```
+
+### Command Example
+
+```php
+namespace Modules\Blog\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class PublishPostCommand extends Command
+{
+    protected $signature = 'blog:publish {post}';
+    protected $description = 'Publish a blog post';
+    
+    public function handle()
+    {
+        $this->info('Post published!');
+    }
+}
+```
+
+### How It Works
+
+The `ArtisanPlugin` scans for command files:
+
+**Source**: `src/Plugins/ArtisanPlugin.php:31-46`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->commandFileFinder() // Finds: */src/Console/Commands/*.php
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $file) => $file->fullyQualifiedClassName())
+        ->filter($this->isInstantiableCommand(...));
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $fqcn) => $this->artisan->resolve($fqcn));
+    
+    $this->registerNamespacesInTinker();
+}
+```
+
+<Note>
+Abstract command classes are automatically filtered out. Only instantiable commands that extend `Illuminate\Console\Command` are registered.
+</Note>
+
+## Database Migrations
+
+Migration directories in `database/migrations` are automatically discovered and registered with Laravel's migrator.
+
+### Directory Structure
+
+```
+app-modules/Blog/
+└── database/
+    └── migrations/
+        ├── 2024_01_01_000000_create_posts_table.php
+        └── 2024_01_02_000000_create_comments_table.php
+```
+
+### How It Works
+
+The `MigratorPlugin` registers migration paths:
+
+**Source**: `src/Plugins/MigratorPlugin.php:19-30`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->migrationDirectoryFinder() // Finds: */database/migrations/
+        ->values()
+        ->map(fn(SplFileInfo $file) => $file->getRealPath());
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $path) => $this->migrator->path($path));
+}
+```
+
+### Running Migrations
+
+```bash
+php artisan migrate
+```
+
+All module migrations are included automatically. No additional configuration needed.
+
+<Info>
+Migrations from all modules run in chronological order based on their timestamp prefixes, just like standard Laravel migrations.
+</Info>
+
+## Blade Components
+
+Blade components in `src/View/Components` are automatically discovered and registered with module-specific prefixes.
+
+### Directory Structure
+
+```
+app-modules/Blog/
+├── src/
+│   └── View/
+│       └── Components/
+│           ├── PostCard.php
+│           └── CommentList.php
+└── resources/
+    └── views/
+        └── components/
+            ├── post-card.blade.php
+            └── comment-list.blade.php
+```
+
+### Component Class Example
+
+```php
+namespace Modules\Blog\View\Components;
+
+use Illuminate\View\Component;
+
+class PostCard extends Component
+{
+    public function __construct(
+        public string $title,
+        public string $excerpt
+    ) {}
+    
+    public function render()
+    {
+        return view('blog::components.post-card');
+    }
+}
+```
+
+### Using Discovered Components
+
+Components are automatically prefixed with the module name:
+
+```blade
+{{-- Use with module prefix --}}
+<x-blog::post-card title="Hello" excerpt="World" />
+
+{{-- Components are namespaced by module --}}
+<x-blog::comment-list :post="$post" />
+```
+
+### How It Works
+
+The `BladePlugin` discovers both component classes and directories:
+
+**Source**: `src/Plugins/BladePlugin.php:19-52`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return [
+        'files' => $finders
+            ->bladeComponentFileFinder() // Finds: */src/View/Components/*.php
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'fqcn' => $component->fullyQualifiedClassName(),
+            ])
+            ->toArray(),
+        'directories' => $finders
+            ->bladeComponentDirectoryFinder() // Finds: */src/View/Components/
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'namespace' => $component->module()->qualify('View\\Components'),
+            ])
+            ->toArray(),
+    ];
+}
+
+public function handle(Collection $data)
+{
+    foreach ($data['files'] as $config) {
+        $this->blade->component($config['fqcn'], null, $config['prefix']);
+    }
+    
+    foreach ($data['directories'] as $config) {
+        $this->blade->componentNamespace($config['namespace'], $config['prefix']);
+    }
+}
+```
+
+<Note>
+Blade components are automatically prefixed with the lowercase module name (e.g., `blog::`, `user::`).
+</Note>
+
+## Event Discovery
+
+Event listeners in `src/Listeners` are automatically discovered and mapped to their corresponding events.
+
+### Directory Structure
+
+```
+app-modules/Blog/
+└── src/
+    ├── Events/
+    │   └── PostPublished.php
+    └── Listeners/
+        ├── SendPostNotification.php
+        └── UpdatePostStats.php
+```
+
+### Event and Listener Example
+
+```php
+// src/Events/PostPublished.php
+namespace Modules\Blog\Events;
+
+use Illuminate\Foundation\Events\Dispatchable;
+
+class PostPublished
+{
+    use Dispatchable;
+    
+    public function __construct(
+        public Post $post
+    ) {}
+}
+
+// src/Listeners/SendPostNotification.php
+namespace Modules\Blog\Listeners;
+
+use Modules\Blog\Events\PostPublished;
+
+class SendPostNotification
+{
+    public function handle(PostPublished $event)
+    {
+        // Send notification
+    }
+}
+```
+
+### Configuration
+
+Event discovery follows your application's configuration. It's controlled by the `should_discover_events` setting:
+
+```php
+// config/app-modules.php
+'should_discover_events' => null, // null = auto-detect from app config
+```
+
+### How It Works
+
+The `EventsPlugin` discovers event listeners:
+
+**Source**: `src/Plugins/EventsPlugin.php:25-47`
+
+```php
+public function discover(FinderFactory $finders): array
+{
+    if (! $this->shouldDiscoverEvents()) {
+        return [];
+    }
+    
+    return $finders
+        ->listenerDirectoryFinder() // Finds: */src/Listeners/
+        ->withModuleInfo()
+        ->reduce(fn(array $discovered, ModuleFileInfo $file) => array_merge_recursive(
+            $discovered,
+            DiscoverEvents::within($file->getPathname(), $file->module()->path('src'))
+        ), []);
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(function(array $listeners, string $event) {
+        foreach (array_unique($listeners, SORT_REGULAR) as $listener) {
+            $this->events->listen($event, $listener);
+        }
+    });
+}
+```
+
+### Discovery Logic
+
+The `DiscoverEvents` class extends Laravel's event discovery:
+
+**Source**: `src/Support/DiscoverEvents.php:8-18`
+
+```php
+class DiscoverEvents extends \Illuminate\Foundation\Events\DiscoverEvents
+{
+    protected static function classFromFile(SplFileInfo $file, $basePath)
+    {
+        if ($module = Modules::moduleForPath($file->getRealPath())) {
+            return $module->pathToFullyQualifiedClassName($file->getPathname());
+        }
+        
+        return parent::classFromFile($file, $basePath);
+    }
+}
+```
+
+<Info>
+Event discovery uses type-hinting in listener `handle()` methods to automatically map listeners to events. No manual registration required.
+</Info>
+
+### Disabling Event Discovery
+
+To disable event discovery:
+
+```php
+// config/app-modules.php
+'should_discover_events' => false,
+```
+
+## Policy Discovery
+
+Policies for Eloquent models are automatically discovered and registered with Laravel's Gate.
+
+### Directory Structure
+
+```
+app-modules/Blog/
+└── src/
+    ├── Models/
+    │   ├── Post.php
+    │   └── Comment.php
+    └── Policies/
+        ├── PostPolicy.php
+        └── CommentPolicy.php
+```
+
+### Policy Example
+
+```php
+// src/Models/Post.php
+namespace Modules\Blog\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Post extends Model
+{
+    // Model definition
+}
+
+// src/Policies/PostPolicy.php
+namespace Modules\Blog\Policies;
+
+use Modules\Blog\Models\Post;
+use App\Models\User;
+
+class PostPolicy
+{
+    public function update(User $user, Post $post): bool
+    {
+        return $user->id === $post->author_id;
+    }
+}
+```
+
+### Using Discovered Policies
+
+```php
+// Automatically uses PostPolicy
+$user->can('update', $post);
+
+// In Blade
+@can('update', $post)
+    <a href="{{ route('posts.edit', $post) }}">Edit</a>
+@endcan
+```
+
+### How It Works
+
+The `GatePlugin` discovers models and their policies:
+
+**Source**: `src/Plugins/GatePlugin.php:20-52`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->modelFileFinder() // Finds: */src/Models/*.php
+        ->withModuleInfo()
+        ->values()
+        ->map(function(ModuleFileInfo $file) {
+            $fqcn = $file->fullyQualifiedClassName();
+            $namespace = rtrim($file->module()->namespaces->first(), '\\');
+            
+            // Try multiple policy naming conventions
+            $candidates = [
+                $namespace.'\\Policies\\'.Str::after($fqcn, 'Models\\').'Policy', // Nested: Policies/Foo/BarPolicy
+                $namespace.'\\Policies\\'.Str::afterLast($fqcn, '\\').'Policy',   // Flat: Policies/BarPolicy
+            ];
+            
+            foreach ($candidates as $candidate) {
+                if (class_exists($candidate)) {
+                    return [
+                        'fqcn' => $fqcn,
+                        'policy' => $candidate,
+                    ];
+                }
+            }
+            
+            return null;
+        })
+        ->filter();
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(fn(array $row) => $this->gate->policy($row['fqcn'], $row['policy']));
+}
+```
+
+### Policy Naming Conventions
+
+Policies are discovered using these naming patterns:
+
+1. **Flat structure**: `Modules\Blog\Policies\PostPolicy` for `Modules\Blog\Models\Post`
+2. **Nested structure**: `Modules\Blog\Policies\Admin\PostPolicy` for `Modules\Blog\Models\Admin\Post`
+
+<Note>
+The policy discovery checks for class existence, so only policies that exist are registered. Missing policies don't cause errors.
+</Note>
+
+## Additional Auto-Discovery
+
+### Routes
+
+Route files in `routes/` are automatically loaded. See [Module Routing](/guides/module-routing) for details.
+
+### Views
+
+View directories in `resources/views` are automatically registered with module namespaces. See [Module Views](/guides/module-views) for details.
+
+### Translations
+
+Translation files in `resources/lang` are automatically discovered and registered with module namespaces.
+
+### Factories
+
+Database factories in `database/factories` are automatically registered. See [Module Factories](/guides/module-factories) for details.
+
+## Performance Considerations
+
+<Warning>
+Auto-discovery scans the filesystem during application boot. In production, ensure you're using `php artisan optimize` to cache the discovered resources.
+</Warning>
+
+### Optimization Commands
+
+```bash
+# Cache all discovered resources
+php artisan optimize
+
+# Clear all caches
+php artisan optimize:clear
+
+# Cache routes (includes module routes)
+php artisan route:cache
+
+# Cache events (includes module events)
+php artisan event:cache
+```
+
+<Info>
+All Laravel caching mechanisms work seamlessly with module auto-discovery. The same optimization strategies apply.
+</Info>
+
+## Disabling Auto-Discovery
+
+If you need to disable specific auto-discovery features, you can unregister plugins:
+
+```php
+// In a service provider
+use InterNACHI\Modular\PluginRegistry;
+
+public function register()
+{
+    // Note: This is not recommended for most use cases
+    // The package doesn't provide a built-in disable method
+    // You would need to extend the package to implement this
+}
+```
+
+<Note>
+Auto-discovery is designed to be the default behavior. If you need manual control over specific resources, consider using a custom plugin or manually registering resources in your module's service provider.
+</Note>

@@ -1,0 +1,184 @@
+---
+title: MigratorPlugin
+description: Registers module migration directories with Laravel's migrator
+---
+
+The `MigratorPlugin` automatically discovers and registers migration directories from all enabled modules, making module migrations available to Laravel's migration system.
+
+## Overview
+
+This plugin scans each module for database migration directories and registers them with Laravel's migrator. This allows you to run migrations across all modules using standard Artisan commands.
+
+## Source Location
+
+`InterNACHI\Modular\Plugins\MigratorPlugin`
+
+## Activation
+
+The plugin uses the `AfterResolving` attribute to activate when the migrator is resolved:
+
+```php
+#[AfterResolving(Migrator::class, parameter: 'migrator')]
+class MigratorPlugin extends Plugin
+```
+
+<Info>
+This plugin automatically activates after the migrator is resolved from the service container, typically when running migration commands.
+</Info>
+
+## How It Works
+
+### 1. Discovery Phase
+
+The `discover()` method finds all migration directories:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->migrationDirectoryFinder()
+        ->values()
+        ->map(fn(SplFileInfo $file) => $file->getRealPath());
+}
+```
+
+### 2. Registration Phase
+
+The `handle()` method registers each path with the migrator:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $path) => $this->migrator->path($path));
+}
+```
+
+## Expected Module Structure
+
+For migrations to be discovered, they must be located in:
+
+```
+app-modules/
+└── your-module/
+    └── database/
+        └── migrations/
+            ├── 2024_01_01_000000_create_posts_table.php
+            └── 2024_01_02_000000_create_comments_table.php
+```
+
+## Example Migration
+
+```php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->text('content');
+            $table->timestamps();
+        });
+    }
+    
+    public function down(): void
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+
+## Usage
+
+### Running Migrations
+
+All module migrations are automatically included when running standard migration commands:
+
+```bash
+# Run all pending migrations from all modules
+php artisan migrate
+
+# Rollback the last batch
+php artisan migrate:rollback
+
+# Reset all migrations
+php artisan migrate:reset
+
+# Refresh all migrations
+php artisan migrate:refresh
+```
+
+### Checking Migration Status
+
+```bash
+php artisan migrate:status
+```
+
+This will show migrations from all modules along with their run status.
+
+## Migration Path Registration
+
+<Note>
+The plugin registers the entire migration directory path, not individual migration files. Laravel's migrator handles loading and running individual migrations.
+</Note>
+
+Each module's migration directory is added to the migrator's paths:
+
+```php
+$this->migrator->path($path);
+```
+
+This is equivalent to calling:
+
+```php
+$this->loadMigrationsFrom($path);
+```
+
+In a traditional service provider.
+
+## Migration Naming
+
+Follow Laravel's standard migration naming convention:
+
+```
+YYYY_MM_DD_HHMMSS_description_of_migration.php
+```
+
+Examples:
+- `2024_01_15_100000_create_posts_table.php`
+- `2024_01_15_100001_add_status_to_posts_table.php`
+- `2024_01_16_080000_create_comments_table.php`
+
+<Info>
+Migrations run in chronological order based on their timestamp prefix, regardless of which module they belong to.
+</Info>
+
+## Testing
+
+Module migrations work with Laravel's testing database migrations:
+
+```php
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+class PostTest extends TestCase
+{
+    use RefreshDatabase;
+    
+    public function test_can_create_post()
+    {
+        // Module migrations are automatically run
+        $post = Post::create(['title' => 'Test']);
+        
+        $this->assertDatabaseHas('posts', ['title' => 'Test']);
+    }
+}
+```
+
+## Dependencies
+
+- `Illuminate\Database\Migrations\Migrator` - Laravel's migration system
+- `InterNACHI\Modular\Support\FinderFactory` - Directory discovery

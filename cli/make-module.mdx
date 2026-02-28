@@ -1,0 +1,170 @@
+---
+title: make:module
+description: Create a new Laravel module with all necessary files and configuration
+---
+
+The `make:module` command scaffolds a new module with a complete directory structure, configuration files, and automatically updates your project's `composer.json` to register the module.
+
+## Usage
+
+```bash
+php artisan make:module {name}
+```
+
+## Arguments
+
+<ParamField path="name" type="string" required>
+  The name of the module to create. Will be converted to kebab-case for the directory name and StudlyCase for class names.
+  
+  **Example:** `BlogPosts` becomes `blog-posts` directory with `BlogPostsServiceProvider` class.
+</ParamField>
+
+## Options
+
+<ParamField path="--accept-default-namespace" type="boolean">
+  Skip the default namespace confirmation prompt when creating your first module.
+  
+  Useful for CI/CD environments or when you're confident about using the default `Modules` namespace.
+</ParamField>
+
+## What It Does
+
+When you run `make:module`, the command performs several operations:
+
+1. **Creates module directory structure** in your configured modules path (default: `app-modules/`)
+2. **Generates initial files** including:
+   - `composer.json` with PSR-4 autoloading configuration
+   - Service Provider (`src/Providers/[Module]ServiceProvider.php`)
+   - Routes file (`routes/[module]-routes.php`)
+   - Empty directories for views, factories, migrations, seeders, and tests
+3. **Updates root `composer.json`** to add:
+   - Path repository pointing to your modules directory
+   - Require statement for the new module
+4. **Clears module cache** automatically
+
+## Examples
+
+### Create a basic module
+
+```bash
+php artisan make:module Blog
+```
+
+**Terminal Output:**
+```
+Welcome
+=======
+
+You're about to create your first module in the Modules namespace.
+This is the default namespace, and will work for many use-cases.
+
+Would you like to cancel and configure your module namespace first? (yes/no) [yes]:
+> no
+
+Creating initial module files
+==============================
+
+ - Created app-modules/blog
+ - Wrote to composer.json
+ - Wrote to src/Providers/BlogServiceProvider.php
+ - Wrote to routes/blog-routes.php
+ - Wrote to resources/views/.gitkeep
+ - Wrote to database/factories/.gitkeep
+ - Wrote to database/migrations/.gitkeep
+ - Wrote to database/seeders/.gitkeep
+ - Wrote to tests/.gitkeep
+
+Updating application composer.json file
+========================================
+
+ - Adding path repository for app-modules/*
+ - Adding require statement for modules/blog:*
+ - Wrote to /path/to/composer.json
+
+Please run composer update modules/blog
+```
+
+### Create a module with custom namespace
+
+After publishing the config and setting `modules_namespace` to `MyCompany`:
+
+```bash
+php artisan make:module Inventory
+```
+
+This creates the module with namespace `MyCompany\Inventory` instead of `Modules\Inventory`.
+
+### Skip namespace confirmation (CI/CD)
+
+```bash
+php artisan make:module Analytics --accept-default-namespace
+```
+
+## Generated Module Structure
+
+```
+app-modules/blog/
+├── composer.json
+├── src/
+│   └── Providers/
+│       └── BlogServiceProvider.php
+├── routes/
+│   └── blog-routes.php
+├── resources/
+│   └── views/
+│       └── .gitkeep
+├── database/
+│   ├── factories/
+│   │   └── .gitkeep
+│   ├── migrations/
+│   │   └── .gitkeep
+│   └── seeders/
+│       └── .gitkeep
+└── tests/
+    └── .gitkeep
+```
+
+## Next Steps
+
+After creating a module:
+
+1. **Run Composer update** to symlink the module:
+   ```bash
+   composer update modules/blog
+   ```
+
+2. **Register the Service Provider** in your module's `composer.json` (auto-discovery):
+   ```json
+   "extra": {
+       "laravel": {
+           "providers": [
+               "Modules\\Blog\\Providers\\BlogServiceProvider"
+           ]
+       }
+   }
+   ```
+
+3. **Start building** your module by adding controllers, models, and other components
+
+<Note>
+  The command automatically sorts the `require` section in your `composer.json` to maintain consistent ordering.
+</Note>
+
+<Warning>
+  If you plan to extract modules into standalone packages later, configure a custom namespace (like your organization name) before creating your first module. Run `php artisan vendor:publish --tag=modular-config` to publish the configuration.
+</Warning>
+
+## Namespace Configuration
+
+The command respects your configuration in `config/app-modules.php`:
+
+- `modules_namespace` - The PHP namespace for modules (default: `Modules`)
+- `modules_vendor` - The vendor name in composer packages (default: kebab-case of namespace)
+- `modules_directory` - Where modules are stored (default: `app-modules`)
+- `stubs` - Custom stub files for scaffolding
+
+## Related Commands
+
+- [modules:list](/cli/modules-list) - View all installed modules
+- [modules:cache](/cli/modules-cache) - Cache module configuration
+- [modules:sync](/cli/modules-sync) - Sync PhpStorm and PHPUnit configuration

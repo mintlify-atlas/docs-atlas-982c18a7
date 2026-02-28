@@ -1,0 +1,232 @@
+---
+title: modules:cache
+description: Create a cache file for faster module loading and improved performance
+---
+
+The `modules:cache` command generates a cache file that stores module metadata, significantly improving module discovery and loading performance in your Laravel application.
+
+## Usage
+
+```bash
+php artisan modules:cache
+```
+
+This command takes no arguments or options.
+
+## What It Does
+
+1. **Clears existing cache** - Removes any stale module cache by calling `modules:clear`
+2. **Scans all modules** - Discovers and processes all registered modules
+3. **Writes cache file** - Stores module metadata in a cache file for quick retrieval
+4. **Confirms success** - Displays a success message
+
+## Example Output
+
+```bash
+php artisan modules:cache
+```
+
+**Terminal Output:**
+```
+Module cache cleared!
+Modules cached successfully!
+```
+
+<Note>
+  The first line appears because `modules:cache` automatically calls `modules:clear` before caching to ensure fresh data.
+</Note>
+
+## Performance Benefits
+
+Caching modules provides significant performance improvements:
+
+- **Faster application boot time** - Module metadata is loaded from cache instead of filesystem scanning
+- **Reduced I/O operations** - Single cache file read vs. multiple directory traversals
+- **Optimized for production** - Essential for deployment environments
+- **Improved service provider discovery** - Autoload configuration is pre-processed
+
+### Before vs After Caching
+
+**Without cache (development):**
+- Scans modules directory on every request
+- Reads multiple `composer.json` files
+- Processes autoload configuration dynamically
+
+**With cache (production):**
+- Reads single cached file
+- Module data is immediately available
+- No filesystem scanning required
+
+## When to Use
+
+Run `modules:cache` in these scenarios:
+
+### During Deployment
+
+Include in your deployment script:
+
+```bash
+# deployment.sh
+composer install --optimize-autoloader --no-dev
+php artisan modules:cache
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+### After Module Changes
+
+Recache when you:
+- Add a new module
+- Remove a module
+- Modify module configuration
+- Update module `composer.json` files
+
+### Production Optimization
+
+Always cache modules in production environments for optimal performance.
+
+## Cache Location
+
+The cache file is stored in your Laravel application's bootstrap cache directory:
+
+```
+bootstrap/cache/modules.php
+```
+
+This location is consistent with other Laravel cache files like `config.php` and `routes.php`.
+
+## Cache Invalidation
+
+The cache should be cleared and regenerated when:
+
+- **Module added or removed** - Registry has changed
+- **Module configuration updated** - Namespaces or paths modified  
+- **Autoload changes** - PSR-4 configuration in module's `composer.json` updated
+- **Deployment** - Ensure production has latest module structure
+
+<Warning>
+  Always clear the module cache during development when making module-level changes. In development, you may prefer to leave the cache disabled for automatic change detection.
+</Warning>
+
+## Development vs Production
+
+### Development Environment
+
+In development, you typically **don't cache modules** to allow:
+- Automatic module discovery
+- Immediate reflection of changes
+- Easier debugging
+
+If you do cache during development, remember to clear cache frequently:
+
+```bash
+php artisan modules:clear
+```
+
+### Production Environment
+
+In production, **always cache modules** as part of deployment:
+
+```bash
+php artisan modules:cache
+```
+
+This is critical for application performance and should be included in your deployment automation.
+
+## Integration with Other Cache Commands
+
+### Clear All Caches
+
+When clearing application caches, include module cache:
+
+```bash
+php artisan cache:clear
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
+php artisan modules:clear
+```
+
+### Cache Everything
+
+When caching for production, include module cache:
+
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+php artisan modules:cache
+```
+
+## Automated Deployment
+
+### Laravel Forge
+
+Add to your deployment script:
+
+```bash
+cd /home/forge/example.com
+git pull origin main
+composer install --no-interaction --prefer-dist --optimize-autoloader
+php artisan modules:cache
+php artisan migrate --force
+php artisan queue:restart
+```
+
+### Laravel Vapor
+
+Include in `vapor.yml`:
+
+```yaml
+id: 1
+name: my-app
+environments:
+  production:
+    build:
+      - 'composer install --no-dev'
+      - 'php artisan modules:cache'
+    deploy:
+      - 'php artisan migrate --force'
+```
+
+### GitHub Actions
+
+```yaml
+- name: Cache modules
+  run: php artisan modules:cache
+```
+
+## Troubleshooting
+
+### Cache not improving performance?
+
+1. **Verify cache file exists:**
+   ```bash
+   ls -la bootstrap/cache/modules.php
+   ```
+
+2. **Check file permissions:**
+   ```bash
+   chmod 644 bootstrap/cache/modules.php
+   ```
+
+3. **Ensure directory is writable:**
+   ```bash
+   chmod 755 bootstrap/cache/
+   ```
+
+### Cache contains stale data?
+
+Clear and regenerate:
+
+```bash
+php artisan modules:clear
+php artisan modules:cache
+```
+
+## Related Commands
+
+- [modules:clear](/cli/modules-clear) - Remove the module cache
+- [modules:list](/cli/modules-list) - View all cached modules
+- [modules:sync](/cli/modules-sync) - Sync configuration after module changes

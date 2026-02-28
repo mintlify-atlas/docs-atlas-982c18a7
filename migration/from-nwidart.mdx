@@ -1,0 +1,428 @@
+---
+title: Migrating from nwidart/laravel-modules
+description: Guide for migrating from nwidart/laravel-modules to Laravel Modular
+---
+
+## Overview
+
+Laravel Modular provides a lighter-weight alternative to `nwidart/laravel-modules` that follows Laravel conventions more closely. This guide will help you understand the differences and migrate your existing modules.
+
+## Key Differences
+
+### Philosophy
+
+Laravel Modular is designed with different goals in mind:
+
+<Note>
+  Laravel Modular focuses on **organization** rather than dynamic module management. If you need to dynamically enable/disable modules at runtime (common in CMS applications), `nwidart/laravel-modules` may be a better fit.
+</Note>
+
+| Aspect | nwidart/laravel-modules | Laravel Modular |
+|--------|------------------------|------------------|
+| **Directory Structure** | Custom module structure | Standard Laravel conventions |
+| **Autoloading** | Custom autoloader | Composer path repositories |
+| **Discovery** | Custom discovery system | Laravel package discovery |
+| **Dynamic Loading** | Enable/disable modules at runtime | All modules always loaded |
+| **Weight** | Full-featured CMS solution | Minimal organizational tooling |
+
+### Technical Approach
+
+**nwidart/laravel-modules** uses its own directory structure and conventions, making it powerful but requiring a learning curve beyond Laravel itself.
+
+**Laravel Modular** leverages:
+- [Composer path repositories](https://getcomposer.org/doc/05-repositories.md#path) for autoloading
+- [Laravel package discovery](https://laravel.com/docs/packages#package-discovery) for initialization
+- Standard Laravel directory conventions within modules
+
+## Migration Steps
+
+<Steps>
+
+<Step title="Install Laravel Modular">
+  Install the package via Composer:
+  
+  ```bash
+  composer require internachi/modular
+  ```
+  
+  Laravel will auto-discover the package automatically.
+</Step>
+
+<Step title="Publish and Configure">
+  Publish the configuration file:
+  
+  ```bash
+  php artisan vendor:publish --tag=modular-config
+  ```
+  
+  Edit `config/app-modules.php` to set your namespace:
+  
+  ```php
+  'modules_namespace' => 'YourOrg', // Recommended over 'Modules'
+  'modules_directory' => 'app-modules',
+  ```
+</Step>
+
+<Step title="Restructure Module Directories">
+  Laravel Modular uses Laravel package conventions. You'll need to restructure your modules:
+  
+  **Before (nwidart structure):**
+  ```
+  Modules/
+    Blog/
+      Config/
+      Console/
+      Database/
+      Entities/      ← Models
+      Http/
+      Providers/
+      Resources/
+      Routes/
+      Tests/
+      module.json    ← Module metadata
+  ```
+  
+  **After (Laravel Modular structure):**
+  ```
+  app-modules/
+    blog/
+      composer.json  ← Package metadata
+      src/           ← Models, Controllers, etc.
+      routes/
+      resources/
+      database/
+      tests/
+  ```
+</Step>
+
+<Step title="Update Directory Mappings">
+  Map your nwidart directories to Laravel Modular conventions:
+  
+  | nwidart | Laravel Modular | Notes |
+  |---------|-----------------|-------|
+  | `Entities/` | `src/Models/` | Follow Laravel conventions |
+  | `Http/Controllers/` | `src/Http/Controllers/` | Same structure |
+  | `Console/` | `src/Console/` | Commands auto-discovered |
+  | `Providers/` | `src/Providers/` | Optional, auto-discovery handles most cases |
+  | `Config/` | `config/` | Can be published via service provider |
+  | `Database/Migrations/` | `database/migrations/` | Auto-discovered |
+  | `Database/Seeders/` | `database/seeders/` | Use `--module` flag |
+  | `Resources/views/` | `resources/views/` | Namespaced automatically |
+  | `Resources/lang/` | `resources/lang/` | Namespaced automatically |
+</Step>
+
+<Step title="Create composer.json for Each Module">
+  Each module needs a `composer.json` file. You can generate new modules to see the structure:
+  
+  ```bash
+  php artisan make:module example
+  ```
+  
+  Example `composer.json`:
+  
+  ```json
+  {
+    "name": "modules/blog",
+    "description": "Blog module",
+    "type": "library",
+    "require": {},
+    "autoload": {
+      "psr-4": {
+        "Modules\\Blog\\": "src/"
+      }
+    },
+    "autoload-dev": {},
+    "extra": {
+      "laravel": {
+        "providers": [
+          "Modules\\Blog\\Providers\\BlogServiceProvider"
+        ]
+      }
+    }
+  }
+  ```
+</Step>
+
+<Step title="Update Application composer.json">
+  Add the module as a path repository and require it:
+  
+  ```json
+  {
+    "repositories": [
+      {
+        "type": "path",
+        "url": "app-modules/*",
+        "options": {
+          "symlink": true
+        }
+      }
+    ],
+    "require": {
+      "modules/blog": "*"
+    }
+  }
+  ```
+  
+  Run Composer update:
+  
+  ```bash
+  composer update modules/blog
+  ```
+</Step>
+
+<Step title="Update Namespaces">
+  Update all namespace references in your module files:
+  
+  **Before:**
+  ```php
+  namespace Modules\Blog\Entities;
+  ```
+  
+  **After:**
+  ```php
+  namespace Modules\Blog\Models;
+  ```
+  
+  <Warning>
+    Make sure to update all references throughout your codebase, including imports in other files.
+  </Warning>
+</Step>
+
+<Step title="Migrate Service Providers">
+  Service providers are optional in Laravel Modular due to auto-discovery, but if you need one:
+  
+  **Before (nwidart):**
+  ```php
+  namespace Modules\Blog\Providers;
+  
+  use Illuminate\Support\ServiceProvider;
+  
+  class BlogServiceProvider extends ServiceProvider
+  {
+      protected $moduleName = 'Blog';
+      protected $moduleNameLower = 'blog';
+      
+      public function boot()
+      {
+          $this->registerTranslations();
+          $this->registerConfig();
+          $this->registerViews();
+      }
+      
+      // Custom registration methods...
+  }
+  ```
+  
+  **After (Laravel Modular):**
+  ```php
+  namespace Modules\Blog\Providers;
+  
+  use Illuminate\Support\ServiceProvider;
+  
+  class BlogServiceProvider extends ServiceProvider
+  {
+      public function register(): void
+      {
+          // Register bindings
+      }
+      
+      public function boot(): void
+      {
+          // Views, translations, and migrations are auto-discovered
+          // Only register custom functionality here
+      }
+  }
+  ```
+</Step>
+
+<Step title="Update View and Translation References">
+  Both packages use namespaced views and translations, but ensure your references match:
+  
+  **Views:**
+  ```php
+  // Both packages
+  view('blog::posts.index')
+  ```
+  
+  **Translations:**
+  ```php
+  // Both packages
+  __('blog::messages.welcome')
+  ```
+</Step>
+
+<Step title="Update Blade Components">
+  Laravel Modular auto-discovers Blade components with namespacing:
+  
+  | File | Component |
+  |------|----------|
+  | `src/View/Components/Alert.php` | `<x-blog::alert />` |
+  | `resources/components/button.blade.php` | `<x-blog::button />` |
+</Step>
+
+<Step title="Run Sync Command">
+  Update your project configuration:
+  
+  ```bash
+  php artisan modules:sync
+  ```
+  
+  This will:
+  - Add modules to `phpunit.xml`
+  - Update PhpStorm configuration
+  - Ensure proper IDE support
+</Step>
+
+<Step title="Remove nwidart/laravel-modules">
+  Once migration is complete and tested:
+  
+  ```bash
+  composer remove nwidart/laravel-modules
+  ```
+  
+  Remove the old `Modules/` directory if everything is working.
+</Step>
+
+</Steps>
+
+## Feature Comparison
+
+<Accordion title="Module Status (Enable/Disable)">
+  **nwidart:** Modules can be enabled/disabled at runtime
+  
+  **Laravel Modular:** All modules are always loaded (by design)
+  
+  If you need dynamic module loading, consider:
+  - Feature flags for functionality
+  - Route middleware for access control
+  - Staying with nwidart/laravel-modules
+</Accordion>
+
+<Accordion title="Module Commands">
+  **nwidart commands:**
+  - `php artisan module:make`
+  - `php artisan module:make-controller`
+  - `php artisan module:make-model`
+  - etc.
+  
+  **Laravel Modular commands:**
+  - `php artisan make:module`
+  - `php artisan make:controller --module=`
+  - `php artisan make:model --module=`
+  - Uses standard Laravel `make:` commands with `--module` flag
+</Accordion>
+
+<Accordion title="Assets and Publishing">
+  **nwidart:** Built-in asset publishing system
+  
+  **Laravel Modular:** Use standard Laravel asset publishing in your service provider:
+  
+  ```php
+  public function boot(): void
+  {
+      $this->publishes([
+          __DIR__.'/../../resources/assets' => public_path('vendor/blog'),
+      ], 'blog-assets');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Module Dependencies">
+  **nwidart:** Custom dependency system in `module.json`
+  
+  **Laravel Modular:** Use standard Composer dependencies in `composer.json`:
+  
+  ```json
+  {
+    "require": {
+      "modules/core": "*"
+    }
+  }
+  ```
+</Accordion>
+
+## Benefits of Laravel Modular
+
+### Follows Laravel Conventions
+
+You can use all standard Laravel commands and patterns without learning module-specific syntax:
+
+```bash
+# Standard Laravel commands work with --module flag
+php artisan make:model Post --module=blog
+php artisan make:controller PostController --module=blog
+php artisan make:migration create_posts_table --module=blog
+```
+
+### Lighter Weight
+
+Laravel Modular adds minimal overhead:
+- No custom autoloading
+- No runtime module status checks
+- No module-specific configuration formats
+
+### Better IDE Support
+
+Because modules are Composer packages:
+- Full IDE autocomplete
+- Native PHPStan/Psalm support
+- Standard debugging tools work immediately
+
+### Standard Package Ecosystem
+
+Modules can be easily extracted to standalone packages:
+
+```bash
+# Module is already a valid Composer package
+mv app-modules/blog ~/packages/my-org/blog
+# Update composer.json repository path
+```
+
+## Common Issues
+
+<Warning>
+  **Module not found after migration**
+  
+  Make sure you've:
+  1. Added the module to `composer.json` repositories
+  2. Required it in the `require` section
+  3. Run `composer update modules/your-module`
+  4. Run `php artisan modules:cache` if in production
+</Warning>
+
+<Warning>
+  **Classes not auto-discovered**
+  
+  Check your module's `composer.json`:
+  - PSR-4 autoloading is correctly configured
+  - Namespace matches your directory structure
+  - Service provider is registered in `extra.laravel.providers`
+</Warning>
+
+<Warning>
+  **Views/translations not loading**
+  
+  Ensure:
+  - Files are in `resources/views/` and `resources/lang/`
+  - Module name matches (case-sensitive)
+  - Run `php artisan modules:clear` to clear cache
+</Warning>
+
+## Getting Help
+
+If you encounter issues during migration:
+
+- Check the [GitHub repository](https://github.com/InterNACHI/modular) for similar issues
+- Review the [comparison section](https://github.com/InterNACHI/modular#comparison-to-nwidartlaravel-modules) in the README
+- Ensure your use case aligns with Laravel Modular's organizational focus
+
+## When to Stay with nwidart
+
+Consider staying with `nwidart/laravel-modules` if you:
+
+- Need to dynamically enable/disable modules at runtime
+- Are building a CMS with plugin architecture
+- Require module-specific permissions and access control
+- Have heavily invested in nwidart's conventions and tooling
+
+Laravel Modular is ideal for teams that want better organization while staying close to Laravel conventions.

@@ -1,0 +1,531 @@
+---
+title: IDE Integration
+description: Configure PhpStorm for optimal Laravel Modular development experience
+---
+
+Laravel Modular includes automatic PhpStorm configuration to provide IDE support for your modules. The `modules:sync` command updates various PhpStorm config files to ensure proper code completion, navigation, and indexing.
+
+## Sync Command
+
+The `modules:sync` command updates both PHPUnit and PhpStorm configuration files:
+
+```bash
+php artisan modules:sync
+```
+
+**Source**: `src/Console/Commands/ModulesSync.php:31-41`
+
+```php
+public function handle(ModuleRegistry $registry, Filesystem $filesystem)
+{
+    $this->filesystem = $filesystem;
+    $this->registry = $registry;
+    
+    $this->updatePhpUnit();
+    
+    if (true !== $this->option('no-phpstorm')) {
+        $this->updatePhpStormConfig();
+    }
+}
+```
+
+### Skip PhpStorm Updates
+
+If you want to update only PHPUnit configuration:
+
+```bash
+php artisan modules:sync --no-phpstorm
+```
+
+<Info>
+Run `modules:sync` after creating new modules or when your IDE isn't recognizing module files properly.
+</Info>
+
+## PHPUnit Configuration
+
+The command automatically adds a test suite for modules to your `phpunit.xml`.
+
+### What It Does
+
+**Source**: `src/Console/Commands/ModulesSync.php:43-78`
+
+```php
+protected function updatePhpUnit(): void
+{
+    $config_path = $this->getLaravel()->basePath('phpunit.xml');
+    
+    if (! $this->filesystem->exists($config_path)) {
+        $this->warn('No phpunit.xml file found. Skipping PHPUnit configuration.');
+        return;
+    }
+    
+    $modules_directory = config('app-modules.modules_directory', 'app-modules');
+    
+    $config = simplexml_load_string($this->filesystem->get($config_path));
+    
+    $existing_nodes = $config->xpath("//phpunit//testsuites//testsuite//directory[text()='./{$modules_directory}/*/tests']");
+    
+    if (count($existing_nodes)) {
+        $this->info('Modules test suite already exists in phpunit.xml');
+        return;
+    }
+    
+    $testsuites = $config->xpath('//phpunit//testsuites');
+    if (! count($testsuites)) {
+        $this->error('Cannot find <testsuites> node in phpunit.xml file. Skipping PHPUnit configuration.');
+        return;
+    }
+    
+    $testsuite = $testsuites[0]->addChild('testsuite');
+    $testsuite->addAttribute('name', 'Modules');
+    
+    $directory = $testsuite->addChild('directory');
+    $directory->addAttribute('suffix', 'Test.php');
+    $directory[0] = "./{$modules_directory}/*/tests";
+    
+    $this->filesystem->put($config_path, $config->asXML());
+    $this->info('Added "Modules" PHPUnit test suite.');
+}
+```
+
+### Generated Configuration
+
+After running `modules:sync`, your `phpunit.xml` will include:
+
+```xml
+<phpunit>
+    <testsuites>
+        <!-- Your existing test suites -->
+        <testsuite name="Modules">
+            <directory suffix="Test.php">./app-modules/*/tests</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
+```
+
+### Running Module Tests
+
+```bash
+# Run all tests including modules
+php artisan test
+
+# Run only module tests
+php artisan test --testsuite=Modules
+
+# Run specific module tests
+php artisan test app-modules/Blog/tests
+```
+
+<Note>
+The test suite is only added if it doesn't already exist, so running `modules:sync` multiple times is safe.
+</Note>
+
+## PhpStorm Configuration
+
+The command updates four PhpStorm configuration files to optimize IDE support:
+
+**Source**: `src/Console/Commands/ModulesSync.php:80-86`
+
+```php
+protected function updatePhpStormConfig(): void
+{
+    $this->updatePhpStormLaravelPlugin();
+    $this->updatePhpStormPhpConfig();
+    $this->updatePhpStormWorkspaceConfig();
+    $this->updatePhpStormProjectIml();
+}
+```
+
+### 1. Laravel Plugin Configuration
+
+Updates `.idea/laravel-plugin.xml` to register module view paths with the Laravel plugin.
+
+**Source**: `src/Support/PhpStorm/LaravelConfigWriter.php:10-34`
+
+```php
+public function write(): bool
+{
+    $plugin_config = $this->getNormalizedPluginConfig();
+    $template_paths = $plugin_config->xpath('//templatePath');
+    
+    // Clean up template paths to prevent duplicates
+    foreach ($template_paths as $template_path_key => $existing) {
+        if (null !== $this->module_registry->module((string) $existing['namespace'])) {
+            unset($template_paths[$template_path_key][0]);
+        }
+    }
+    
+    // Now add all modules to the config
+    $modules_directory = config('app-modules.modules_directory', 'app-modules');
+    $list = $plugin_config->xpath('//option[@name="templatePaths"]//list')[0];
+    $this->module_registry->modules()
+        ->sortBy('name')
+        ->each(function(ModuleConfig $module_config) use ($list, $modules_directory) {
+            $node = $list->addChild('templatePath');
+            $node->addAttribute('namespace', $module_config->name);
+            $node->addAttribute('path', "{$modules_directory}/{$module_config->name}/resources/views");
+        });
+    
+    return false !== file_put_contents($this->config_path, $this->formatXml($plugin_config));
+}
+```
+
+#### What This Enables
+
+- Blade view path completion in controllers: `view('blog::posts.index')`
+- View reference navigation (Ctrl+Click on view names)
+- Template autocomplete in Blade directives
+
+### 2. PHP Framework Configuration
+
+Updates `.idea/php.xml` to exclude module symlinks from the vendor directory.
+
+**Source**: `src/Support/PhpStorm/PhpFrameworkWriter.php:11-50`
+
+```php
+public function write(): bool
+{
+    $config = $this->getNormalizedPluginConfig();
+    
+    $namespace = config('app-modules.modules_namespace', 'Modules');
+    $vendor = config('app-modules.modules_vendor') ?? Str::kebab($namespace);
+    $module_paths = $this->module_registry->modules()
+        ->map(function(ModuleConfig $module) use (&$config, $vendor) {
+            return '$PROJECT_DIR$/vendor/'.$vendor.'/'.$module->name;
+        });
+    
+    // Remove modules from include_path
+    if (! empty($config->xpath('//component[@name="PhpIncludePathManager"]//include_path//path'))) {
+        $include_paths = $config->xpath('//component[@name="PhpIncludePathManager"]//include_path//path');
+        foreach ($include_paths as $key => $existing) {
+            if ($module_paths->contains((string) $existing['value'])) {
+                unset($include_paths[$key][0]);
+            }
+        }
+    }
+    
+    // Add modules to exclude_path
+    $exclude_paths = $config->xpath('//component[@name="PhpIncludePathManager"]//exclude_path//path');
+    $existing_values = collect($exclude_paths)->map(function($node) {
+        return (string) $node['value'];
+    });
+    
+    // Now add all missing modules to the config
+    $content = $config->xpath('//component[@name="PhpIncludePathManager"]//exclude_path')[0];
+    $module_paths->each(function(string $module_path) use (&$content, $existing_values) {
+        if ($existing_values->contains($module_path)) {
+            return;
+        }
+        
+        $path_node = $content->addChild('path');
+        $path_node->addAttribute('value', $module_path);
+    });
+    
+    return false !== file_put_contents($this->config_path, $this->formatXml($config));
+}
+```
+
+#### Why Exclude Vendor Symlinks?
+
+Modules are symlinked into `vendor/` for autoloading. Without exclusion:
+
+- PhpStorm indexes the same code twice (module source + vendor symlink)
+- "Multiple definitions found" warnings appear
+- Slower indexing and increased memory usage
+
+<Info>
+This configuration ensures PhpStorm only indexes the module source in `app-modules/`, not the vendor symlinks.
+</Info>
+
+### 3. Workspace Configuration
+
+Updates `.idea/workspace.xml` to remove module vendor symlinks from library roots.
+
+**Source**: `src/Support/PhpStorm/WorkspaceWriter.php:10-33`
+
+```php
+public function write(): bool
+{
+    $config = simplexml_load_string(file_get_contents($this->config_path));
+    if (empty($config->xpath('//component[@name="PhpWorkspaceProjectConfiguration"]//include_path//path'))) {
+        return true;
+    }
+    
+    $namespace = config('app-modules.modules_namespace', 'Modules');
+    $vendor = config('app-modules.modules_vendor') ?? Str::kebab($namespace);
+    $module_paths = $this->module_registry->modules()
+        ->map(function(ModuleConfig $module) use (&$config, $vendor) {
+            return '$PROJECT_DIR$/vendor/'.$vendor.'/'.$module->name;
+        });
+    
+    $include_paths = $config->xpath('//component[@name="PhpWorkspaceProjectConfiguration"]//include_path//path');
+    
+    foreach ($include_paths as $key => $existing) {
+        if ($module_paths->contains((string) $existing['value'])) {
+            unset($include_paths[$key][0]);
+        }
+    }
+    
+    return false !== file_put_contents($this->config_path, $this->formatXml($config));
+}
+```
+
+#### What This Prevents
+
+- Duplicate autocompletion entries
+- Redundant "Go to Definition" targets
+- Unnecessary indexing overhead
+
+### 4. Project IML Configuration
+
+Updates `.idea/*.iml` files to mark module directories as source folders with proper namespaces.
+
+**Source**: `src/Support/PhpStorm/ProjectImlWriter.php:10-44`
+
+```php
+public function write(): bool
+{
+    $modules_directory = config('app-modules.modules_directory', 'app-modules');
+    
+    $iml = $this->getNormalizedPluginConfig();
+    $source_folders = $iml->xpath('//component[@name="NewModuleRootManager"]//content[@url="file://$MODULE_DIR$"]//sourceFolder');
+    $existing_urls = collect($source_folders)->map(function($node) {
+        return (string) $node['url'];
+    });
+    
+    // Now add all missing modules to the config
+    $content = $iml->xpath('//component[@name="NewModuleRootManager"]//content[@url="file://$MODULE_DIR$"]')[0];
+    $this->module_registry->modules()
+        ->sortBy('name')
+        ->each(function(ModuleConfig $module_config) use (&$content, $modules_directory, $existing_urls) {
+            $src_url = "file://\$MODULE_DIR\$/{$modules_directory}/{$module_config->name}/src";
+            
+            if (! $existing_urls->contains($src_url)) {
+                $src_node = $content->addChild('sourceFolder');
+                $src_node->addAttribute('url', $src_url);
+                $src_node->addAttribute('isTestSource', 'false');
+                $src_node->addAttribute('packagePrefix', rtrim($module_config->namespaces->first(), '\\'));
+            }
+            
+            $tests_url = "file://\$MODULE_DIR\$/{$modules_directory}/{$module_config->name}/tests";
+            if (! $existing_urls->contains($tests_url)) {
+                $tests_node = $content->addChild('sourceFolder');
+                $tests_node->addAttribute('url', $tests_url);
+                $tests_node->addAttribute('isTestSource', 'true');
+                $tests_node->addAttribute('packagePrefix', rtrim($module_config->namespaces->first(), '\\').'\\Tests');
+            }
+        });
+    
+    return false !== file_put_contents($this->config_path, $this->formatXml($iml));
+}
+```
+
+#### What This Enables
+
+- Proper namespace detection in module files
+- Test/source folder distinction (green test folders)
+- Correct PSR-4 autoloading suggestions
+- "New PHP Class" templates use correct namespace
+
+<Note>
+The `.iml` file is typically named after your project (e.g., `my-project.iml`). The command automatically finds and updates it.
+</Note>
+
+## Configuration File Structure
+
+The `ConfigWriter` base class handles XML formatting:
+
+**Source**: `src/Support/PhpStorm/ConfigWriter.php:32-60`
+
+```php
+abstract public function write(): bool;
+
+public function handle(): bool
+{
+    if (! $this->checkConfigFilePermissions()) {
+        return false;
+    }
+    
+    return $this->write();
+}
+
+protected function checkConfigFilePermissions(): bool
+{
+    if (! is_readable($this->config_path) || ! is_writable($this->config_path)) {
+        return $this->error("Unable to find or read: '{$this->config_path}'");
+    }
+    
+    if (! is_writable($this->config_path)) {
+        return $this->error("Config file is not writable: '{$this->config_path}'");
+    }
+    
+    return true;
+}
+
+protected function formatXml(SimpleXMLElement $xml): string
+{
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->formatOutput = true;
+    $dom->preserveWhiteSpace = false;
+    $dom->loadXML($xml->asXML());
+    
+    $xml = $dom->saveXML();
+    $xml = preg_replace('~(\S)/>\s*$~m', '$1 />', $xml);
+    
+    return $xml;
+}
+```
+
+## When to Run modules:sync
+
+Run the sync command in these scenarios:
+
+<Steps>
+
+### After Creating a New Module
+
+```bash
+php artisan make:module NewModule
+php artisan modules:sync
+```
+
+This registers the module with PhpStorm immediately.
+
+### After Cloning a Repository
+
+```bash
+git clone your-repo
+cd your-repo
+composer install
+php artisan modules:sync
+```
+
+Ensures PhpStorm recognizes all modules.
+
+### When IDE Support Breaks
+
+If PhpStorm stops recognizing module classes:
+
+```bash
+php artisan modules:sync
+```
+
+Then restart PhpStorm or use "File > Invalidate Caches / Restart".
+
+### After Changing Namespace Configuration
+
+```bash
+# Edit config/app-modules.php
+php artisan modules:sync
+composer dump-autoload
+```
+
+</Steps>
+
+## Command Output
+
+The command provides detailed feedback:
+
+```bash
+$ php artisan modules:sync
+Added "Modules" PHPUnit test suite.
+Updated PhpStorm/Laravel Plugin config file...
+Updated PhpStorm PHP config file...
+Updated PhpStorm workspace library roots...
+Updated PhpStorm project source folders in 'my-project.iml'
+```
+
+### Verbose Mode
+
+For troubleshooting, use verbose output:
+
+```bash
+php artisan modules:sync -v
+```
+
+This shows error messages if configuration files can't be updated.
+
+## Troubleshooting
+
+### Config Files Not Updated
+
+<Accordion title="File Permissions">
+Ensure `.idea/` directory and files are writable:
+
+```bash
+chmod -R u+w .idea/
+```
+</Accordion>
+
+<Accordion title="PhpStorm Not Open">
+Some config files are only created when PhpStorm opens the project. Open your project in PhpStorm first, then run:
+
+```bash
+php artisan modules:sync
+```
+</Accordion>
+
+<Accordion title="Missing .idea Directory">
+The `.idea/` directory is created by PhpStorm. If it doesn't exist:
+
+1. Open your project in PhpStorm
+2. Wait for initial indexing to complete
+3. Run `php artisan modules:sync`
+</Accordion>
+
+### Module Classes Not Recognized
+
+<Steps>
+
+### Run Sync Command
+
+```bash
+php artisan modules:sync
+```
+
+### Dump Autoload
+
+```bash
+composer dump-autoload
+```
+
+### Invalidate PhpStorm Caches
+
+In PhpStorm: **File > Invalidate Caches / Restart > Invalidate and Restart**
+
+### Check Namespace Configuration
+
+Verify `config/app-modules.php` matches your module namespaces.
+
+</Steps>
+
+<Warning>
+The `.idea/` directory is typically git-ignored. Each developer should run `modules:sync` after cloning the repository.
+</Warning>
+
+## Other IDEs
+
+While the sync command is PhpStorm-specific, the PHPUnit configuration works with any IDE:
+
+- **VS Code**: Use the PHPUnit extension with the generated test suite
+- **Sublime Text**: Test runners will recognize the module test suite
+- **Vim/Neovim**: PHP language servers will use Composer's autoload configuration
+
+<Info>
+If you'd like to contribute IDE integration for other editors, see the PhpStorm writer classes in `src/Support/PhpStorm/` as examples.
+</Info>
+
+## Continuous Integration
+
+In CI environments, you don't need `modules:sync` since:
+
+- PHPUnit already works via Composer autoloading
+- No IDE configuration needed
+
+Just run your tests normally:
+
+```yaml
+# .github/workflows/tests.yml
+- name: Run tests
+  run: php artisan test
+```

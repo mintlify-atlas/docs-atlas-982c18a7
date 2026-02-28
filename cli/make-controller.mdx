@@ -1,0 +1,326 @@
+---
+title: 'make:controller'
+description: 'Generate controller classes within your modules'
+---
+
+## Command
+
+```bash
+php artisan make:controller {name} --module={module}
+```
+
+Create a new controller class in your module's `src/Http/Controllers` directory.
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the controller class
+  
+  **Examples:**
+  - `UserController`
+  - `Admin/PostController`
+  - `Api/V1/CommentController`
+</ParamField>
+
+## Options
+
+<ParamField path="--module" type="string" required>
+  The name of the module where the controller should be created
+  
+  **Example:** `--module=blog`
+</ParamField>
+
+<ParamField path="--api" type="boolean">
+  Generate an API controller (excludes `create` and `edit` methods)
+  
+  ```bash
+  php artisan make:controller PostController --api --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--invokable" type="boolean">
+  Generate a single action controller with an `__invoke` method
+  
+  ```bash
+  php artisan make:controller ShowDashboard --invokable --module=admin
+  ```
+</ParamField>
+
+<ParamField path="--model" type="string">
+  Generate a resource controller for the given model
+  
+  ```bash
+  php artisan make:controller PostController --model=Post --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--resource" type="boolean" default="false">
+  Generate a resource controller with CRUD methods
+  
+  ```bash
+  php artisan make:controller PostController --resource --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--requests" type="boolean">
+  Generate form request classes for store and update methods (use with `--resource`)
+  
+  ```bash
+  php artisan make:controller PostController --resource --requests --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--singleton" type="boolean">
+  Generate a singleton resource controller
+  
+  ```bash
+  php artisan make:controller ProfileController --singleton --module=user
+  ```
+</ParamField>
+
+<ParamField path="--test" type="boolean">
+  Generate an accompanying test for the controller
+</ParamField>
+
+<ParamField path="--pest" type="boolean">
+  Generate an accompanying Pest test
+</ParamField>
+
+## Examples
+
+### Basic Controller
+
+```bash
+php artisan make:controller UserController --module=user-management
+```
+
+Creates a basic controller:
+
+```php
+namespace Modules\UserManagement\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class UserController extends Controller
+{
+    //
+}
+```
+
+**Location:** `app-modules/user-management/src/Http/Controllers/UserController.php`
+
+### Resource Controller
+
+```bash
+php artisan make:controller PostController --resource --module=blog
+```
+
+Generates a controller with all CRUD methods:
+
+```php
+namespace Modules\Blog\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class PostController extends Controller
+{
+    public function index() {}
+    public function create() {}
+    public function store(Request $request) {}
+    public function show(string $id) {}
+    public function edit(string $id) {}
+    public function update(Request $request, string $id) {}
+    public function destroy(string $id) {}
+}
+```
+
+### API Resource Controller
+
+```bash
+php artisan make:controller Api/PostController --api --module=blog
+```
+
+Creates an API controller without `create` and `edit` methods:
+
+```php
+namespace Modules\Blog\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class PostController extends Controller
+{
+    public function index() {}
+    public function store(Request $request) {}
+    public function show(string $id) {}
+    public function update(Request $request, string $id) {}
+    public function destroy(string $id) {}
+}
+```
+
+**Location:** `app-modules/blog/src/Http/Controllers/Api/PostController.php`
+
+### Controller with Model Binding
+
+```bash
+php artisan make:controller PostController --model=Post --module=blog
+```
+
+Generates a resource controller with type-hinted model parameters:
+
+```php
+namespace Modules\Blog\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Modules\Blog\Models\Post;
+use Illuminate\Http\Request;
+
+class PostController extends Controller
+{
+    public function index() {}
+    public function create() {}
+    public function store(Request $request) {}
+    public function show(Post $post) {}
+    public function edit(Post $post) {}
+    public function update(Request $request, Post $post) {}
+    public function destroy(Post $post) {}
+}
+```
+
+<Note>
+  The `--model` option automatically resolves the model namespace to your module when the model exists in the module.
+</Note>
+
+### Controller with Form Requests
+
+```bash
+php artisan make:controller PostController --resource --requests --module=blog
+```
+
+Generates:
+1. A resource controller with form request type hints
+2. `StorePostRequest` class
+3. `UpdatePostRequest` class
+
+```php
+namespace Modules\Blog\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Modules\Blog\Http\Requests\StorePostRequest;
+use Modules\Blog\Http\Requests\UpdatePostRequest;
+
+class PostController extends Controller
+{
+    public function store(StorePostRequest $request) {}
+    public function update(UpdatePostRequest $request, string $id) {}
+}
+```
+
+### Invokable Controller
+
+```bash
+php artisan make:controller ShowDashboard --invokable --module=admin
+```
+
+Creates a single-action controller:
+
+```php
+namespace Modules\Admin\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class ShowDashboard extends Controller
+{
+    public function __invoke(Request $request)
+    {
+        //
+    }
+}
+```
+
+<Tip>
+  Invokable controllers are perfect for single-purpose actions and keep your routing clean.
+</Tip>
+
+### Nested Controllers
+
+```bash
+php artisan make:controller Admin/PostController --resource --module=blog
+```
+
+Creates a controller in a subdirectory:
+
+**Location:** `app-modules/blog/src/Http/Controllers/Admin/PostController.php`
+
+**Namespace:** `Modules\Blog\Http\Controllers\Admin`
+
+## Module-Specific Behavior
+
+When using the `--module` option with `--model`, the controller generator:
+
+1. **Parses model namespaces** to ensure they reference module models
+2. **Validates model names** to prevent invalid characters
+3. **Auto-prefixes namespaces** if you provide a simple model name
+
+<CodeGroup>
+
+```bash Simple Model Name
+php artisan make:controller PostController --model=Post --module=blog
+# Resolves to: Modules\Blog\Models\Post
+```
+
+```bash Fully Qualified Model
+php artisan make:controller PostController --model="Modules\Blog\Models\Post" --module=blog
+# Uses the provided namespace as-is
+```
+
+</CodeGroup>
+
+## Usage with Routes
+
+After creating a controller, register routes in your module's route file:
+
+```php app-modules/blog/routes/blog-routes.php
+use Modules\Blog\Http\Controllers\PostController;
+
+Route::resource('posts', PostController::class);
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Organize by responsibility" icon="folder-tree">
+  Group related controllers in subdirectories:
+  
+  - `Admin/PostController` - Admin functionality
+  - `Api/V1/PostController` - API endpoints
+  - `Guest/PostController` - Public-facing controllers
+</Accordion>
+
+<Accordion title="Use form requests" icon="shield-check">
+  Always use `--requests` with resource controllers to separate validation logic:
+  
+  ```bash
+  php artisan make:controller PostController --resource --requests --module=blog
+  ```
+</Accordion>
+
+<Accordion title="Choose API or web" icon="code-branch">
+  Use `--api` for API endpoints (no `create`/`edit` views) and regular `--resource` for web routes with views.
+</Accordion>
+
+<Accordion title="Consider invokable controllers" icon="bolt">
+  For single-action controllers, use `--invokable` to keep code focused and routes cleaner.
+</Accordion>
+
+</AccordionGroup>
+
+## See Also
+
+- `make:request --module=` - Generate form request classes (see [Make Commands Overview](/cli/make-commands-overview))
+- [make:model](/cli/make-model) - Generate model classes
+- [Laravel Controller Documentation](https://laravel.com/docs/controllers)

@@ -1,0 +1,392 @@
+---
+title: 'make:model'
+description: 'Generate Eloquent model classes within your modules'
+---
+
+## Command
+
+```bash
+php artisan make:model {name} --module={module}
+```
+
+Create a new Eloquent model class in your module's `src/Models` directory.
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the model class
+  
+  **Examples:**
+  - `Post`
+  - `User`
+  - `Admin/Product`
+</ParamField>
+
+## Options
+
+<ParamField path="--module" type="string" required>
+  The name of the module where the model should be created
+  
+  **Example:** `--module=blog`
+</ParamField>
+
+<ParamField path="-m, --migration" type="boolean">
+  Create a new migration file for the model
+  
+  ```bash
+  php artisan make:model Post -m --module=blog
+  ```
+</ParamField>
+
+<ParamField path="-f, --factory" type="boolean">
+  Create a new factory for the model
+  
+  ```bash
+  php artisan make:model Post -f --module=blog
+  ```
+</ParamField>
+
+<ParamField path="-s, --seed" type="boolean">
+  Create a new seeder for the model
+  
+  ```bash
+  php artisan make:model Post -s --module=blog
+  ```
+</ParamField>
+
+<ParamField path="-c, --controller" type="boolean">
+  Create a new controller for the model
+  
+  ```bash
+  php artisan make:model Post -c --module=blog
+  ```
+</ParamField>
+
+<ParamField path="-r, --resource" type="boolean">
+  Create a resource controller for the model (implies `-c`)
+  
+  ```bash
+  php artisan make:model Post -r --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--api" type="boolean">
+  Create an API controller for the model
+  
+  ```bash
+  php artisan make:model Post --api --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--policy" type="boolean">
+  Create a new policy for the model
+  
+  ```bash
+  php artisan make:model Post --policy --module=blog
+  ```
+</ParamField>
+
+<ParamField path="-a, --all" type="boolean">
+  Generate migration, seeder, factory, policy, resource controller, and form requests
+  
+  ```bash
+  php artisan make:model Post -a --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--pivot" type="boolean">
+  Indicates if the generated model should be a custom intermediate table model
+  
+  ```bash
+  php artisan make:model PostTag --pivot --module=blog
+  ```
+</ParamField>
+
+<ParamField path="--morph-pivot" type="boolean">
+  Indicates if the generated model should be a custom polymorphic intermediate table model
+</ParamField>
+
+## Examples
+
+### Basic Model
+
+```bash
+php artisan make:model Post --module=blog
+```
+
+Creates a basic Eloquent model:
+
+```php
+namespace Modules\Blog\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Post extends Model
+{
+    use HasFactory;
+}
+```
+
+**Location:** `app-modules/blog/src/Models/Post.php`
+
+### Model with Migration
+
+```bash
+php artisan make:model Post -m --module=blog
+```
+
+Generates:
+1. Model: `app-modules/blog/src/Models/Post.php`
+2. Migration: `app-modules/blog/database/migrations/YYYY_MM_DD_HHMMSS_create_posts_table.php`
+
+```php Migration file
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+
+<Note>
+  Migrations are created in the module's `database/migrations` directory and will be automatically discovered by Laravel.
+</Note>
+
+### Model with Factory
+
+```bash
+php artisan make:model Post -f --module=blog
+```
+
+Generates:
+1. Model: `app-modules/blog/src/Models/Post.php`
+2. Factory: `app-modules/blog/database/factories/PostFactory.php`
+
+```php Factory file
+namespace Modules\Blog\Database\Factories;
+
+use Modules\Blog\Models\Post;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    public function definition(): array
+    {
+        return [
+            //
+        ];
+    }
+}
+```
+
+### Complete Model Setup
+
+```bash
+php artisan make:model Post -mfcr --module=blog
+```
+
+Generates:
+1. Model: `Post.php`
+2. Migration: `create_posts_table.php`
+3. Factory: `PostFactory.php`
+4. Resource Controller: `PostController.php`
+
+<Tip>
+  Use `-mfcr` when creating a new resource to scaffold everything you need in one command.
+</Tip>
+
+### All Associated Files
+
+```bash
+php artisan make:model Post -a --module=blog
+```
+
+Generates:
+1. Model
+2. Migration
+3. Factory
+4. Seeder
+5. Policy
+6. Resource Controller
+7. Form Requests (Store and Update)
+
+### Nested Model
+
+```bash
+php artisan make:model Admin/Product -m --module=ecommerce
+```
+
+Creates a model in a subdirectory:
+
+**Location:** `app-modules/ecommerce/src/Models/Admin/Product.php`
+
+**Namespace:** `Modules\Ecommerce\Models\Admin`
+
+## Module-Specific Behavior
+
+### Default Namespace
+
+When using the `--module` option, models are created in the `Models` directory within your module's namespace:
+
+```php
+// Without --module
+namespace App\Models;
+
+// With --module=blog
+namespace Modules\Blog\Models;
+```
+
+This is handled automatically by overriding the `getDefaultNamespace()` method in the source code:
+
+```php MakeModel.php:12-19
+protected function getDefaultNamespace($rootNamespace)
+{
+    if ($module = $this->module()) {
+        $rootNamespace = rtrim($module->namespaces->first(), '\\');
+    }
+    
+    return $rootNamespace.'\\Models';
+}
+```
+
+### Factory Namespace Resolution
+
+When generating factories with `--factory`, the package automatically adjusts the factory namespace to match your module:
+
+```php MakeModel.php:21-34
+protected function buildFactoryReplacements()
+{
+    $replacements = parent::buildFactoryReplacements();
+    
+    if ($module = $this->module()) {
+        $replacements['{{ factory }}'] = str_replace(
+            '\\Database\\Factories\\',
+            '\\'.$module->namespace().'Database\\Factories\\',
+            $replacements['{{ factory }}'],
+        );
+    }
+    
+    return $replacements;
+}
+```
+
+This ensures the `HasFactory` trait correctly resolves your module's factory:
+
+```php
+use Modules\Blog\Database\Factories\PostFactory;
+
+class Post extends Model
+{
+    use HasFactory;
+    
+    protected static function newFactory()
+    {
+        return PostFactory::new();
+    }
+}
+```
+
+## Working with Models
+
+### Using Module Models
+
+Reference models using their full namespace:
+
+```php
+use Modules\Blog\Models\Post;
+
+$post = Post::create([
+    'title' => 'My First Post',
+    'content' => 'Hello World',
+]);
+```
+
+### Using Factories
+
+```php
+use Modules\Blog\Models\Post;
+
+Post::factory()->count(10)->create();
+```
+
+### Model Relationships
+
+When defining relationships between module models:
+
+```php
+namespace Modules\Blog\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Comments\Models\Comment;
+
+class Post extends Model
+{
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class);
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Generate related files together" icon="link">
+  Create models with their associated files in one command:
+  
+  ```bash
+  # Development setup
+  php artisan make:model Post -mfc --module=blog
+  
+  # Production-ready setup
+  php artisan make:model Post -a --module=blog
+  ```
+</Accordion>
+
+<Accordion title="Use descriptive model names" icon="signature">
+  Model names should be singular and describe a single entity:
+  
+  - ✅ `Post`, `Comment`, `User`
+  - ❌ `Posts`, `CommentModel`, `UserData`
+</Accordion>
+
+<Accordion title="Organize complex domains" icon="folder-tree">
+  Use subdirectories for complex modules:
+  
+  ```bash
+  php artisan make:model Billing/Invoice -m --module=ecommerce
+  php artisan make:model Billing/Payment -m --module=ecommerce
+  php artisan make:model Catalog/Product -m --module=ecommerce
+  ```
+</Accordion>
+
+<Accordion title="Keep models focused" icon="bullseye">
+  Each model should represent a single database table. Use traits, observers, and services for complex business logic.
+</Accordion>
+
+</AccordionGroup>
+
+## See Also
+
+- [make:migration](/cli/make-migration) - Generate migration files
+- `make:factory --module=` - Generate model factories (see [Make Commands Overview](/cli/make-commands-overview))
+- [make:controller](/cli/make-controller) - Generate controllers
+- [Laravel Eloquent Documentation](https://laravel.com/docs/eloquent)

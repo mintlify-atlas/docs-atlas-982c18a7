@@ -1,0 +1,355 @@
+---
+title: 'Modules Facade'
+description: 'Convenient facade for accessing the ModuleRegistry'
+---
+
+The `Modules` facade provides a convenient static interface to the `ModuleRegistry` class. It allows you to easily access module information from anywhere in your application.
+
+## Class Reference
+
+```php
+InterNACHI\Modular\Support\Facades\Modules extends Illuminate\Support\Facades\Facade
+```
+
+## Available Methods
+
+All methods from the [ModuleRegistry](/api/module-registry) class are available through this facade:
+
+### module()
+
+Retrieve a specific module by name.
+
+```php
+Modules::module(string $name): ?ModuleConfig
+```
+
+<ParamField path="name" type="string" required>
+  The name of the module to retrieve
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module configuration object, or null if not found
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$blog = Modules::module('blog');
+
+if ($blog) {
+    echo $blog->name; // "blog"
+    echo $blog->namespace(); // "Modules\\Blog\\"
+}
+```
+
+### moduleForPath()
+
+Find a module that contains the given filesystem path.
+
+```php
+Modules::moduleForPath(string $path): ?ModuleConfig
+```
+
+<ParamField path="path" type="string" required>
+  An absolute filesystem path
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module configuration object, or null if not found
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$module = Modules::moduleForPath(__FILE__);
+
+if ($module) {
+    echo "Current file belongs to module: {$module->name}";
+}
+```
+
+### moduleForClass()
+
+Find a module by a fully qualified class name.
+
+```php
+Modules::moduleForClass(string $fqcn): ?ModuleConfig
+```
+
+<ParamField path="fqcn" type="string" required>
+  A fully qualified class name
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module that defines this class, or null if not found
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+use Modules\Blog\Models\Post;
+
+$module = Modules::moduleForClass(Post::class);
+
+echo $module->name; // "blog"
+```
+
+### modules()
+
+Get all registered modules.
+
+```php
+Modules::modules(): Collection
+```
+
+<ResponseField name="return" type="Collection<int, ModuleConfig>">
+  A collection of all registered module configurations
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$allModules = Modules::modules();
+
+$allModules->each(function ($module) {
+    echo $module->name . "\n";
+});
+```
+
+### reload()
+
+Reload the modules collection from disk.
+
+```php
+Modules::reload(): Collection
+```
+
+<ResponseField name="return" type="Collection<int, ModuleConfig>">
+  A fresh collection of all registered module configurations
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+// Force reload modules from disk
+$modules = Modules::reload();
+```
+
+## Usage Examples
+
+### Basic Module Lookup
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+// Get a specific module
+$blog = Modules::module('blog');
+
+if ($blog) {
+    $configPath = $blog->path('config/module.php');
+    $config = require $configPath;
+}
+```
+
+### Working with All Modules
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+// Get all modules
+$modules = Modules::modules();
+
+// Get module names
+$names = $modules->pluck('name');
+
+// Filter modules
+$withRoutes = $modules->filter(function ($module) {
+    return file_exists($module->path('routes/web.php'));
+});
+
+// Count modules
+$count = $modules->count();
+echo "Total modules: {$count}";
+```
+
+### Finding the Current Module
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+class SomeController
+{
+    public function index()
+    {
+        // Find which module this controller belongs to
+        $module = Modules::moduleForClass(static::class);
+        
+        if ($module) {
+            // Load module-specific config
+            $config = require $module->path('config/settings.php');
+        }
+    }
+}
+```
+
+### Loading Module Views
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$modules = Modules::modules();
+
+$modules->each(function ($module) {
+    $viewsPath = $module->path('resources/views');
+    
+    if (is_dir($viewsPath)) {
+        view()->addNamespace($module->name, $viewsPath);
+    }
+});
+
+// Now you can use: view('blog::posts.index')
+```
+
+### Registering Module Routes
+
+```php
+use Illuminate\Support\Facades\Route;
+use InterNACHI\Modular\Support\Facades\Modules;
+
+Modules::modules()->each(function ($module) {
+    $webRoutes = $module->path('routes/web.php');
+    $apiRoutes = $module->path('routes/api.php');
+    
+    if (file_exists($webRoutes)) {
+        Route::middleware('web')
+            ->group($webRoutes);
+    }
+    
+    if (file_exists($apiRoutes)) {
+        Route::middleware('api')
+            ->prefix('api')
+            ->group($apiRoutes);
+    }
+});
+```
+
+### Loading Module Translations
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+Modules::modules()->each(function ($module) {
+    $langPath = $module->path('resources/lang');
+    
+    if (is_dir($langPath)) {
+        app('translator')->addNamespace($module->name, $langPath);
+    }
+});
+
+// Now you can use: trans('blog::messages.welcome')
+```
+
+### Checking Module Existence
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+function moduleExists(string $name): bool
+{
+    return Modules::module($name) !== null;
+}
+
+if (moduleExists('blog')) {
+    // Blog module is available
+}
+```
+
+### Getting Module Statistics
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$stats = Modules::modules()->map(function ($module) {
+    return [
+        'name' => $module->name,
+        'path' => $module->base_path,
+        'namespace' => $module->namespace(),
+        'has_migrations' => is_dir($module->path('database/migrations')),
+        'has_tests' => is_dir($module->path('tests')),
+        'has_routes' => file_exists($module->path('routes/web.php')),
+    ];
+});
+
+return response()->json($stats);
+```
+
+### Creating Module-Aware Commands
+
+```php
+use Illuminate\Console\Command;
+use InterNACHI\Modular\Support\Facades\Modules;
+
+class ModuleListCommand extends Command
+{
+    protected $signature = 'module:list';
+    protected $description = 'List all registered modules';
+    
+    public function handle()
+    {
+        $modules = Modules::modules();
+        
+        $this->table(
+            ['Name', 'Path', 'Namespace'],
+            $modules->map(fn($m) => [
+                $m->name,
+                $m->base_path,
+                $m->namespace(),
+            ])
+        );
+        
+        $this->info("Total: {$modules->count()} modules");
+    }
+}
+```
+
+## Facade vs Direct Access
+
+You can use either the facade or resolve the registry directly:
+
+```php
+// Using the facade (recommended for simplicity)
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$blog = Modules::module('blog');
+```
+
+```php
+// Resolving from the container (useful in constructors)
+use InterNACHI\Modular\Support\ModuleRegistry;
+
+class SomeService
+{
+    public function __construct(
+        protected ModuleRegistry $registry
+    ) {}
+    
+    public function doSomething()
+    {
+        $blog = $this->registry->module('blog');
+    }
+}
+```
+
+## See Also
+
+- [ModuleRegistry](/api/module-registry) - The underlying registry class
+- [ModuleConfig](/api/module-config) - Individual module configuration object

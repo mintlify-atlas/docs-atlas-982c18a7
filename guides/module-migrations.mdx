@@ -1,0 +1,488 @@
+---
+title: Module Migrations
+description: Manage database migrations within Laravel modules
+---
+
+Laravel Modular automatically discovers and loads migrations from each module's `database/migrations/` directory, keeping your database schema organized alongside your module code.
+
+## Creating Migrations
+
+Create migrations within a module using the `--module` flag:
+
+```bash
+php artisan make:migration create_posts_table --module=blog
+```
+
+This creates a migration file in:
+```
+app-modules/blog/database/migrations/2024_01_15_100000_create_posts_table.php
+```
+
+<Note>
+  Migrations are automatically timestamped to ensure correct execution order.
+</Note>
+
+## Migration Structure
+
+Module migrations are identical to standard Laravel migrations:
+
+```php app-modules/blog/database/migrations/2024_01_15_100000_create_posts_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->string('slug')->unique();
+            $table->text('excerpt')->nullable();
+            $table->longText('content');
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->timestamp('published_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+
+## Running Migrations
+
+Module migrations are automatically discovered and run with the standard migrate command:
+
+```bash
+php artisan migrate
+```
+
+This runs all pending migrations from:
+- Your application's `database/migrations/` directory
+- All module `database/migrations/` directories
+
+<Tip>
+  Migrations are executed in chronological order based on their timestamps, regardless of which module they belong to.
+</Tip>
+
+## Migration Discovery
+
+Migrations are automatically discovered from the `database/migrations/` directory of each module:
+
+```
+app-modules/
+├── blog/
+│   └── database/
+│       └── migrations/
+│           ├── 2024_01_15_100000_create_posts_table.php
+│           └── 2024_01_15_110000_create_categories_table.php
+└── shop/
+    └── database/
+        └── migrations/
+            ├── 2024_01_15_120000_create_products_table.php
+            └── 2024_01_15_130000_create_orders_table.php
+```
+
+All these migrations are loaded automatically.
+
+## Common Migration Patterns
+
+### Creating Tables
+
+<CodeGroup>
+```bash Command
+php artisan make:migration create_posts_table --module=blog
+```
+
+```php Migration
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('posts', function (Blueprint $table) {
+            $table->id();
+            $table->string('title');
+            $table->text('content');
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('posts');
+    }
+};
+```
+</CodeGroup>
+
+### Adding Columns
+
+<CodeGroup>
+```bash Command
+php artisan make:migration add_featured_to_posts_table --module=blog
+```
+
+```php Migration
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::table('posts', function (Blueprint $table) {
+            $table->boolean('featured')->default(false)->after('content');
+        });
+    }
+
+    public function down()
+    {
+        Schema::table('posts', function (Blueprint $table) {
+            $table->dropColumn('featured');
+        });
+    }
+};
+```
+</CodeGroup>
+
+### Foreign Keys
+
+```php
+Schema::create('comments', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('post_id')
+          ->constrained()
+          ->cascadeOnDelete();
+    $table->foreignId('user_id')
+          ->constrained()
+          ->cascadeOnDelete();
+    $table->text('content');
+    $table->timestamps();
+});
+```
+
+<Warning>
+  When creating foreign keys to tables in other modules, ensure the referenced table's migration runs first by adjusting timestamps if needed.
+</Warning>
+
+### Pivot Tables
+
+For many-to-many relationships:
+
+```bash
+php artisan make:migration create_post_tag_table --module=blog
+```
+
+```php
+Schema::create('post_tag', function (Blueprint $table) {
+    $table->foreignId('post_id')->constrained()->cascadeOnDelete();
+    $table->foreignId('tag_id')->constrained()->cascadeOnDelete();
+    $table->primary(['post_id', 'tag_id']);
+    $table->timestamps();
+});
+```
+
+## Migration Commands
+
+All standard Laravel migration commands work with module migrations:
+
+### Run Migrations
+
+```bash
+php artisan migrate
+```
+
+### Rollback Migrations
+
+<CodeGroup>
+```bash Last Batch
+php artisan migrate:rollback
+```
+
+```bash Specific Steps
+php artisan migrate:rollback --step=3
+```
+
+```bash All Migrations
+php artisan migrate:reset
+```
+</CodeGroup>
+
+### Refresh Database
+
+<CodeGroup>
+```bash Drop & Recreate
+php artisan migrate:fresh
+```
+
+```bash With Seeding
+php artisan migrate:fresh --seed
+```
+
+```bash Rollback & Re-run
+php artisan migrate:refresh
+```
+</CodeGroup>
+
+### Migration Status
+
+View which migrations have run:
+
+```bash
+php artisan migrate:status
+```
+
+This shows migrations from all modules with their status.
+
+## Generating Migrations with Models
+
+Create a model and migration together:
+
+```bash
+php artisan make:model Post --module=blog --migration
+```
+
+Or use the shorthand:
+
+```bash
+php artisan make:model Post --module=blog -m
+```
+
+Create a model with migration, factory, and seeder:
+
+```bash
+php artisan make:model Post --module=blog -mfs
+```
+
+## Cross-Module Relationships
+
+When creating relationships between modules:
+
+<Steps>
+  <Step title="Create the base table first">
+    Ensure the table being referenced exists before creating foreign keys:
+    
+    ```php
+    // In users table (app migration)
+    Schema::create('users', function (Blueprint $table) {
+        $table->id();
+        $table->string('name');
+        // ...
+    });
+    ```
+  </Step>
+
+  <Step title="Reference it in module migrations">
+    ```php
+    // In blog module
+    Schema::create('posts', function (Blueprint $table) {
+        $table->id();
+        $table->foreignId('user_id')
+              ->constrained('users')
+              ->cascadeOnDelete();
+        // ...
+    });
+    ```
+  </Step>
+
+  <Step title="Verify execution order">
+    Check that timestamps ensure correct execution order:
+    
+    ```bash
+    php artisan migrate:status
+    ```
+  </Step>
+</Steps>
+
+## Migration Path Discovery
+
+Laravel Modular automatically registers migration paths for all modules. Behind the scenes, it:
+
+1. Scans the `app-modules/` directory
+2. Finds all `database/migrations/` subdirectories
+3. Registers them with Laravel's migrator
+4. Runs them in chronological order
+
+This happens through the `MigratorPlugin`:
+
+```php
+// From MigratorPlugin
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $path) => $this->migrator->path($path));
+}
+```
+
+## Testing Migrations
+
+Test your migrations in your module tests:
+
+```php app-modules/blog/tests/MigrationTest.php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+use Illuminate\Support\Facades\Schema;
+
+class MigrationTest extends TestCase
+{
+    public function test_posts_table_has_expected_columns()
+    {
+        $this->assertTrue(Schema::hasTable('posts'));
+        $this->assertTrue(Schema::hasColumn('posts', 'id'));
+        $this->assertTrue(Schema::hasColumn('posts', 'title'));
+        $this->assertTrue(Schema::hasColumn('posts', 'slug'));
+        $this->assertTrue(Schema::hasColumn('posts', 'content'));
+        $this->assertTrue(Schema::hasColumn('posts', 'published_at'));
+    }
+    
+    public function test_posts_table_has_proper_indexes()
+    {
+        $indexes = Schema::getConnection()
+            ->getDoctrineSchemaManager()
+            ->listTableIndexes('posts');
+            
+        $this->assertArrayHasKey('posts_slug_unique', $indexes);
+    }
+}
+```
+
+### Using RefreshDatabase
+
+```php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Blog\Models\Post;
+
+class PostTest extends TestCase
+{
+    use RefreshDatabase;
+    
+    public function test_can_create_post()
+    {
+        $post = Post::factory()->create();
+        
+        $this->assertDatabaseHas('posts', [
+            'id' => $post->id,
+            'title' => $post->title,
+        ]);
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Migration filenames should clearly describe what they do:
+    
+    ```bash
+    # Good
+    php artisan make:migration create_posts_table --module=blog
+    php artisan make:migration add_featured_to_posts_table --module=blog
+    
+    # Bad
+    php artisan make:migration update_posts --module=blog
+    ```
+  </Accordion>
+
+  <Accordion title="Always Define Down Methods">
+    Make migrations reversible:
+    
+    ```php
+    public function down()
+    {
+        Schema::dropIfExists('posts');
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Foreign Key Constraints">
+    Maintain referential integrity:
+    
+    ```php
+    $table->foreignId('user_id')
+          ->constrained()
+          ->cascadeOnDelete();
+    ```
+  </Accordion>
+
+  <Accordion title="Index Important Columns">
+    Add indexes for frequently queried columns:
+    
+    ```php
+    $table->string('slug')->unique();
+    $table->index(['user_id', 'published_at']);
+    ```
+  </Accordion>
+
+  <Accordion title="Keep Migrations Small">
+    Create separate migrations for different changes:
+    
+    ```bash
+    # One migration per logical change
+    php artisan make:migration create_posts_table --module=blog
+    php artisan make:migration create_categories_table --module=blog
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### Migrations Not Found
+
+If migrations aren't being discovered:
+
+```bash
+# Clear the module cache
+php artisan modules:clear
+
+# Check migration status
+php artisan migrate:status
+```
+
+### Migration Already Exists
+
+If you see "migration already exists" errors, check for duplicate files across modules and the main app.
+
+### Foreign Key Constraint Errors
+
+Ensure referenced tables exist before creating foreign keys. Adjust migration timestamps if needed:
+
+```php
+// Rename file to adjust timestamp
+// From: 2024_01_15_100000_create_comments_table.php
+// To:   2024_01_15_110000_create_comments_table.php
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Factories" icon="industry" href="/guides/module-factories">
+    Create test data with model factories
+  </Card>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Generate models and other components
+  </Card>
+</CardGroup>

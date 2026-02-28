@@ -1,0 +1,384 @@
+---
+title: 'Module System'
+description: 'Understanding how modules work in Laravel Modular'
+---
+
+## What is a Module?
+
+A module in Laravel Modular is a self-contained package that follows Laravel's conventions and PSR-4 autoloading standards. Each module:
+
+- Lives in its own directory (default: `app-modules/`)
+- Has its own `composer.json` file
+- Uses PSR-4 autoloading
+- Can contain any Laravel components (models, controllers, migrations, etc.)
+
+## Module Configuration
+
+Each module is represented by a `ModuleConfig` object that contains metadata:
+
+```php
+class ModuleConfig implements Arrayable
+{
+    public function __construct(
+        public string $name,           // Directory name (e.g., 'user-management')
+        public string $base_path,      // Absolute path to module
+        public Collection $namespaces = new Collection(), // PSR-4 mappings
+    ) {}
+}
+```
+
+### Creating from composer.json
+
+Modules are automatically discovered by parsing their `composer.json` files:
+
+```php
+public static function fromComposerFile(SplFileInfo $composer_file): self
+{
+    $composer_config = json_decode($composer_file->getContents(), true, 16, JSON_THROW_ON_ERROR);
+    
+    $base_path = rtrim(str_replace('\\', '/', $composer_file->getPath()), '/');
+    $name = basename($base_path);
+    
+    $namespaces = Collection::make($composer_config['autoload']['psr-4'] ?? [])
+        ->mapWithKeys(function($src, $namespace) use ($base_path) {
+            $path = $base_path.'/'.$src;
+            return [$path => $namespace];
+        });
+    
+    return new static($name, $base_path, $namespaces);
+}
+```
+
+<Info>
+  The module name is automatically derived from the directory name, not from the `composer.json` `name` field.
+</Info>
+
+## Module Methods
+
+The `ModuleConfig` class provides several helper methods:
+
+### Path Resolution
+
+```php
+// Get absolute path to any file/directory in the module
+public function path(string $to = ''): string
+{
+    return rtrim($this->base_path.'/'.$to, '/');
+}
+
+// Usage
+$module = Modules::module('user-management');
+$module->path();                    // /path/to/app-modules/user-management
+$module->path('src/Models');        // /path/to/app-modules/user-management/src/Models
+$module->path('routes/api.php');    // /path/to/app-modules/user-management/routes/api.php
+```
+
+### Namespace Helpers
+
+```php
+// Get the primary namespace
+public function namespace(): string
+{
+    return $this->namespaces->first();
+}
+
+// Qualify a class name with the module namespace
+public function qualify(string $class_name): string
+{
+    return $this->namespace().ltrim($class_name, '\\');
+}
+
+// Usage
+$module->namespace();              // Modules\UserManagement\
+$module->qualify('Models\User');   // Modules\UserManagement\Models\User
+```
+
+### Path to Class Name Conversion
+
+Convert a file path to a fully qualified class name:
+
+```php
+public function pathToFullyQualifiedClassName(string $path): string
+{
+    // Handle Windows-style paths
+    $path = str_replace('\\', '/', $path);
+    
+    foreach ($this->namespaces as $namespace_path => $namespace) {
+        if (str_starts_with($path, $namespace_path)) {
+            $relative_path = Str::after($path, $namespace_path);
+            return $namespace.$this->formatPathAsNamespace($relative_path);
+        }
+    }
+    
+    throw new RuntimeException("Unable to infer qualified class name for '{$path}'");
+}
+
+// Usage
+$module->pathToFullyQualifiedClassName('/app-modules/user-management/src/Models/User.php');
+// Returns: Modules\UserManagement\Models\User
+```
+
+<Warning>
+  The path must be absolute and match one of the PSR-4 namespace mappings, or a `RuntimeException` will be thrown.
+</Warning>
+
+## Accessing Modules
+
+There are multiple ways to access module information:
+
+### Using the Facade
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+// Get a specific module by name
+$module = Modules::module('user-management');
+
+// Get all modules
+$modules = Modules::modules();
+
+// Find module for a file path
+$module = Modules::moduleForPath('/app-modules/user-management/src/Models/User.php');
+
+// Find module for a class
+$module = Modules::moduleForClass('Modules\\UserManagement\\Models\\User');
+```
+
+### Using Dependency Injection
+
+```php
+use InterNACHI\Modular\Support\ModuleRegistry;
+
+class MyService
+{
+    public function __construct(
+        protected ModuleRegistry $modules
+    ) {}
+    
+    public function process()
+    {
+        $module = $this->modules->module('user-management');
+        // ...
+    }
+}
+```
+
+### Using the Helper
+
+```php
+// Get the modules path
+$path = app(ModuleRegistry::class)->getModulesPath();
+```
+
+## Module Lookup Methods
+
+### By Name
+
+```php
+public function module(?string $name = null): ?ModuleConfig
+{
+    // We want to allow for gracefully handling empty/null names
+    return $name ? $this->modules()->get($name) : null;
+}
+
+// Usage
+$module = Modules::module('user-management');
+$module = Modules::module(null); // Returns null
+```
+
+### By Path
+
+```php
+public function moduleForPath(string $path): ?ModuleConfig
+{
+    return $this->module($this->extractModuleNameFromPath($path));
+}
+
+public function moduleForPathOrFail(string $path): ModuleConfig
+{
+    if ($module = $this->moduleForPath($path)) {
+        return $module;
+    }
+    
+    throw new CannotFindModuleForPathException($path);
+}
+
+// Usage
+$module = Modules::moduleForPath('/app-modules/user-management/src/Models/User.php');
+$module = Modules::moduleForPathOrFail('/invalid/path'); // Throws exception
+```
+
+### By Class Name
+
+```php
+public function moduleForClass(string $fqcn): ?ModuleConfig
+{
+    return $this->modules()->first(function(ModuleConfig $module) use ($fqcn) {
+        foreach ($module->namespaces as $namespace) {
+            if (Str::startsWith($fqcn, $namespace)) {
+                return true;
+            }
+        }
+        
+        return false;
+    });
+}
+
+// Usage
+$module = Modules::moduleForClass('Modules\\UserManagement\\Models\\User');
+```
+
+## Module Collection
+
+All modules are stored in a Laravel Collection:
+
+```php
+public function modules(): Collection
+{
+    return $this->modules ??= call_user_func($this->modules_loader);
+}
+```
+
+### Iterating Over Modules
+
+```php
+Modules::modules()->each(function(ModuleConfig $module) {
+    echo "Module: {$module->name}\n";
+    echo "Path: {$module->base_path}\n";
+    echo "Namespace: {$module->namespace()}\n";
+});
+```
+
+### Filtering Modules
+
+```php
+// Find all modules with a specific namespace prefix
+$adminModules = Modules::modules()->filter(function(ModuleConfig $module) {
+    return Str::startsWith($module->namespace(), 'Modules\\Admin\\');
+});
+
+// Get module names
+$names = Modules::modules()->pluck('name');
+```
+
+## Reloading Modules
+
+Force a reload from disk (useful in development):
+
+```php
+public function reload(): Collection
+{
+    $this->modules = null;
+    return $this->modules();
+}
+
+// Usage
+Modules::reload();
+```
+
+<Warning>
+  Reloading modules will bypass the cache and scan the filesystem. Use sparingly in production.
+</Warning>
+
+## Module as Array
+
+Modules can be serialized to arrays:
+
+```php
+public function toArray(): array
+{
+    return [
+        'name' => $this->name,
+        'base_path' => $this->base_path,
+        'namespaces' => $this->namespaces->toArray(),
+    ];
+}
+
+// Usage
+$data = $module->toArray();
+/*
+[
+    'name' => 'user-management',
+    'base_path' => '/path/to/app-modules/user-management',
+    'namespaces' => [
+        '/path/to/app-modules/user-management/src/' => 'Modules\\UserManagement\\',
+        '/path/to/app-modules/user-management/tests/' => 'Modules\\UserManagement\\Tests\\',
+    ]
+]
+*/
+```
+
+## Cross-Platform Support
+
+Laravel Modular handles Windows and Unix paths correctly:
+
+```php
+protected function extractModuleNameFromPath(string $path): string
+{
+    // Handle Windows-style paths
+    $path = str_replace('\\', '/', $path);
+    
+    // If the modules directory is symlinked, we may get two paths that are actually
+    // in the same directory, but have different prefixes. This helps resolve that.
+    if (Str::startsWith($path, $this->modules_path)) {
+        $path = trim(Str::after($path, $this->modules_path), '/');
+    } elseif (Str::startsWith($path, $modules_real_path = str_replace('\\', '/', realpath($this->modules_path)))) {
+        $path = trim(Str::after($path, $modules_real_path), '/');
+    }
+    
+    return explode('/', $path)[0];
+}
+```
+
+<Info>
+  The framework automatically resolves symlinks and handles both forward and backward slashes.
+</Info>
+
+## Practical Examples
+
+### Get Module Information in a Command
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+class ListModulesCommand extends Command
+{
+    public function handle()
+    {
+        Modules::modules()->each(function($module) {
+            $this->info("Module: {$module->name}");
+            $this->line("  Path: {$module->base_path}");
+            $this->line("  Namespace: {$module->namespace()}");
+        });
+    }
+}
+```
+
+### Find Module for Current Class
+
+```php
+class MyController extends Controller
+{
+    public function index()
+    {
+        $module = Modules::moduleForClass(static::class);
+        
+        if ($module) {
+            $viewPath = $module->path('resources/views');
+            // Use module-specific views
+        }
+    }
+}
+```
+
+### Load Module-Specific Configuration
+
+```php
+foreach (Modules::modules() as $module) {
+    $configPath = $module->path('config/module.php');
+    
+    if (file_exists($configPath)) {
+        config([$module->name => require $configPath]);
+    }
+}
+```

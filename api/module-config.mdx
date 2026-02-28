@@ -1,0 +1,322 @@
+---
+title: 'ModuleConfig'
+description: 'Configuration object representing a single module'
+---
+
+The `ModuleConfig` class represents a single module in your application. It contains the module's name, base path, and PSR-4 namespace mappings, and provides helper methods for working with module paths and class names.
+
+## Class Reference
+
+```php
+InterNACHI\Modular\Support\ModuleConfig implements Illuminate\Contracts\Support\Arrayable
+```
+
+## Properties
+
+<ParamField path="name" type="string">
+  The module name (typically the directory name)
+</ParamField>
+
+<ParamField path="base_path" type="string">
+  The absolute path to the module's root directory
+</ParamField>
+
+<ParamField path="namespaces" type="Collection">
+  A collection mapping source directories to PSR-4 namespaces. Keys are absolute paths, values are namespace strings.
+</ParamField>
+
+## Static Methods
+
+### fromComposerFile()
+
+Create a `ModuleConfig` instance from a composer.json file.
+
+```php
+public static function fromComposerFile(SplFileInfo $composer_file): self
+```
+
+<ParamField path="composer_file" type="SplFileInfo" required>
+  A Symfony SplFileInfo object representing the composer.json file
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig">
+  A new ModuleConfig instance with data parsed from the composer.json file
+</ResponseField>
+
+**Example:**
+
+```php
+use Symfony\Component\Finder\Finder;
+use InterNACHI\Modular\Support\ModuleConfig;
+
+$finder = new Finder();
+$composerFiles = $finder->files()
+    ->in(base_path('app-modules'))
+    ->name('composer.json')
+    ->depth('== 1');
+
+foreach ($composerFiles as $file) {
+    $config = ModuleConfig::fromComposerFile($file);
+    echo $config->name;
+}
+```
+
+<Note>
+  This method extracts the module name from the directory name and reads PSR-4 autoload configurations from the `autoload.psr-4` section of composer.json.
+</Note>
+
+## Constructor
+
+```php
+public function __construct(
+    public string $name,
+    public string $base_path,
+    public Collection $namespaces = new Collection(),
+)
+```
+
+<ParamField path="name" type="string" required>
+  The module name
+</ParamField>
+
+<ParamField path="base_path" type="string" required>
+  The absolute path to the module's root directory
+</ParamField>
+
+<ParamField path="namespaces" type="Collection">
+  PSR-4 namespace mappings (defaults to empty collection)
+</ParamField>
+
+## Instance Methods
+
+### path()
+
+Get an absolute path within the module directory.
+
+```php
+public function path(string $to = ''): string
+```
+
+<ParamField path="to" type="string">
+  A relative path within the module (e.g., "src/Models", "config/module.php")
+</ParamField>
+
+<ResponseField name="return" type="string">
+  The absolute path to the specified location within the module
+</ResponseField>
+
+**Example:**
+
+```php
+$module = app(ModuleRegistry::class)->module('blog');
+
+echo $module->path(); 
+// /var/www/app-modules/blog
+
+echo $module->path('src/Models');
+// /var/www/app-modules/blog/src/Models
+
+echo $module->path('config/module.php');
+// /var/www/app-modules/blog/config/module.php
+```
+
+### namespace()
+
+Get the primary PSR-4 namespace for the module.
+
+```php
+public function namespace(): string
+```
+
+<ResponseField name="return" type="string">
+  The first registered namespace for this module
+</ResponseField>
+
+**Example:**
+
+```php
+$module = app(ModuleRegistry::class)->module('blog');
+
+echo $module->namespace();
+// Modules\Blog\
+```
+
+<Note>
+  If a module has multiple PSR-4 namespaces defined, this method returns the first one. Most modules have only a single namespace.
+</Note>
+
+### qualify()
+
+Convert a relative class name to a fully qualified class name using the module's namespace.
+
+```php
+public function qualify(string $class_name): string
+```
+
+<ParamField path="class_name" type="string" required>
+  A relative class name (e.g., "Models\\Post", "\\Controllers\\BlogController")
+</ParamField>
+
+<ResponseField name="return" type="string">
+  The fully qualified class name
+</ResponseField>
+
+**Example:**
+
+```php
+$module = app(ModuleRegistry::class)->module('blog');
+
+echo $module->qualify('Models\\Post');
+// Modules\Blog\Models\Post
+
+echo $module->qualify('\\Models\\Post');
+// Modules\Blog\Models\Post (leading slash is stripped)
+```
+
+### pathToFullyQualifiedClassName()
+
+Convert a filesystem path to a fully qualified class name.
+
+```php
+public function pathToFullyQualifiedClassName(string $path): string
+```
+
+<ParamField path="path" type="string" required>
+  An absolute filesystem path to a PHP file within the module
+</ParamField>
+
+<ResponseField name="return" type="string">
+  The fully qualified class name
+</ResponseField>
+
+<ResponseField name="throws" type="RuntimeException">
+  Thrown when the path doesn't belong to any registered namespace
+</ResponseField>
+
+**Example:**
+
+```php
+$module = app(ModuleRegistry::class)->module('blog');
+
+$fqcn = $module->pathToFullyQualifiedClassName(
+    '/var/www/app-modules/blog/src/Models/Post.php'
+);
+
+echo $fqcn;
+// Modules\Blog\Models\Post
+```
+
+<Note>
+  This method handles both Unix and Windows-style path separators and works with all registered PSR-4 namespaces for the module.
+</Note>
+
+### toArray()
+
+Convert the module configuration to an array.
+
+```php
+public function toArray(): array
+```
+
+<ResponseField name="return" type="array">
+  An array representation of the module configuration
+</ResponseField>
+
+**Example:**
+
+```php
+$module = app(ModuleRegistry::class)->module('blog');
+
+$array = $module->toArray();
+
+/*
+[
+    'name' => 'blog',
+    'base_path' => '/var/www/app-modules/blog',
+    'namespaces' => [
+        '/var/www/app-modules/blog/src' => 'Modules\\Blog\\',
+    ],
+]
+*/
+```
+
+## Usage Examples
+
+### Accessing Module Paths
+
+```php
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$module = Modules::module('blog');
+
+// Load a config file
+$config = require $module->path('config/module.php');
+
+// Check if routes exist
+if (file_exists($module->path('routes/web.php'))) {
+    require $module->path('routes/web.php');
+}
+
+// Load a view
+view()->addNamespace('blog', $module->path('resources/views'));
+```
+
+### Working with Module Classes
+
+```php
+$module = Modules::module('blog');
+
+// Get the fully qualified class name
+$postClass = $module->qualify('Models\\Post');
+
+// Instantiate a class
+$post = app($postClass);
+
+// Or use with class_exists
+if (class_exists($module->qualify('Services\\PostService'))) {
+    // ...
+}
+```
+
+### Converting Paths to Class Names
+
+```php
+$module = Modules::moduleForPath(__FILE__);
+
+if ($module) {
+    $className = $module->pathToFullyQualifiedClassName(__FILE__);
+    echo "Current class: {$className}";
+}
+```
+
+### Inspecting Module Configuration
+
+```php
+$module = Modules::module('blog');
+
+echo "Module: {$module->name}\n";
+echo "Path: {$module->base_path}\n";
+echo "Namespace: {$module->namespace()}\n";
+
+echo "All namespaces:\n";
+$module->namespaces->each(function ($namespace, $path) {
+    echo "  {$path} => {$namespace}\n";
+});
+```
+
+### Serializing Module Configuration
+
+```php
+$modules = Modules::modules()->map(fn($module) => $module->toArray());
+
+// Convert to JSON
+$json = json_encode($modules, JSON_PRETTY_PRINT);
+
+// Store in cache
+cache()->put('modules.config', $modules->toArray());
+```
+
+## See Also
+
+- [ModuleRegistry](/api/module-registry) - The registry that manages ModuleConfig instances
+- [Modules Facade](/api/modules-facade) - Convenient facade for accessing modules

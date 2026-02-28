@@ -1,122 +1,126 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Laravel Modular",
+  "theme": "maple",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#FF2D20",
+    "light": "#FF6B54",
+    "dark": "#CC2417"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/internachi/modular"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/internachi/modular"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/architecture",
+              "concepts/modules",
+              "concepts/plugins",
+              "concepts/module-structure"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Creating Modules",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/creating-modules",
+              "guides/module-components",
+              "guides/module-routing",
+              "guides/module-views",
+              "guides/module-migrations",
+              "guides/module-factories",
+              "guides/customizing-stubs"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Advanced",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "advanced/plugin-system",
+              "advanced/auto-discovery",
+              "advanced/namespace-configuration",
+              "advanced/ide-integration"
+            ]
+          },
+          {
+            "group": "Migration",
+            "pages": [
+              "migration/from-nwidart",
+              "migration/upgrading"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "CLI Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Module Commands",
             "pages": [
-              "api-reference/introduction"
+              "cli/make-module",
+              "cli/modules-list",
+              "cli/modules-cache",
+              "cli/modules-clear",
+              "cli/modules-sync"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Make Commands",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "cli/make-commands-overview",
+              "cli/make-controller",
+              "cli/make-model",
+              "cli/make-migration",
+              "cli/make-provider",
+              "cli/make-command"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/module-registry",
+              "api/module-config",
+              "api/plugin-registry",
+              "api/modules-facade"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "api/plugins/artisan-plugin",
+              "api/plugins/blade-plugin",
+              "api/plugins/events-plugin",
+              "api/plugins/migrator-plugin",
+              "api/plugins/routes-plugin",
+              "api/plugins/translator-plugin"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

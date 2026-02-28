@@ -1,0 +1,291 @@
+---
+title: 'ModuleRegistry'
+description: 'Core registry for managing and accessing modules in your application'
+---
+
+The `ModuleRegistry` class is the central hub for module management in Laravel Modular. It maintains a collection of discovered modules and provides methods to retrieve modules by name, path, or class namespace.
+
+## Class Reference
+
+```php
+InterNACHI\Modular\Support\ModuleRegistry
+```
+
+## Constructor
+
+```php
+public function __construct(
+    protected string $modules_path,
+    protected Closure $modules_loader,
+)
+```
+
+<ParamField path="modules_path" type="string" required>
+  The absolute path to the modules directory
+</ParamField>
+
+<ParamField path="modules_loader" type="Closure" required>
+  A closure that returns the collection of modules when invoked
+</ParamField>
+
+## Methods
+
+### getModulesPath()
+
+Returns the absolute path to the modules directory.
+
+```php
+public function getModulesPath(): string
+```
+
+<ResponseField name="return" type="string">
+  The absolute path to the modules directory
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+$path = $registry->getModulesPath();
+// /var/www/app-modules
+```
+
+### module()
+
+Retrieve a specific module by name.
+
+```php
+public function module(?string $name = null): ?ModuleConfig
+```
+
+<ParamField path="name" type="string|null">
+  The name of the module to retrieve. If null or empty, returns null.
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module configuration object, or null if not found
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+$module = $registry->module('blog');
+
+if ($module) {
+    echo $module->name; // "blog"
+    echo $module->base_path; // "/var/www/app-modules/blog"
+}
+```
+
+### moduleForPath()
+
+Find a module that contains the given filesystem path.
+
+```php
+public function moduleForPath(string $path): ?ModuleConfig
+```
+
+<ParamField path="path" type="string" required>
+  An absolute filesystem path that belongs to a module
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module configuration object, or null if no module contains this path
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+$module = $registry->moduleForPath('/var/www/app-modules/blog/src/Models/Post.php');
+
+echo $module->name; // "blog"
+```
+
+### moduleForPathOrFail()
+
+Find a module that contains the given filesystem path, or throw an exception.
+
+```php
+public function moduleForPathOrFail(string $path): ModuleConfig
+```
+
+<ParamField path="path" type="string" required>
+  An absolute filesystem path that belongs to a module
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig">
+  The module configuration object
+</ResponseField>
+
+<ResponseField name="throws" type="CannotFindModuleForPathException">
+  Thrown when no module contains the given path
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\Exceptions\CannotFindModuleForPathException;
+
+try {
+    $registry = app(ModuleRegistry::class);
+    $module = $registry->moduleForPathOrFail('/var/www/app-modules/blog/src/Models/Post.php');
+    echo $module->name;
+} catch (CannotFindModuleForPathException $e) {
+    // Handle the error
+}
+```
+
+### moduleForClass()
+
+Find a module by a fully qualified class name.
+
+```php
+public function moduleForClass(string $fqcn): ?ModuleConfig
+```
+
+<ParamField path="fqcn" type="string" required>
+  A fully qualified class name (e.g., "Modules\\Blog\\Models\\Post")
+</ParamField>
+
+<ResponseField name="return" type="ModuleConfig|null">
+  The module that defines this class, or null if not found
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+$module = $registry->moduleForClass('Modules\\Blog\\Models\\Post');
+
+if ($module) {
+    echo $module->name; // "blog"
+}
+```
+
+<Note>
+  This method searches through all registered module namespaces to find a match. It returns the first module whose namespace is a prefix of the given class name.
+</Note>
+
+### modules()
+
+Get all registered modules.
+
+```php
+public function modules(): Collection
+```
+
+<ResponseField name="return" type="Collection<int, ModuleConfig>">
+  A collection of all registered module configurations
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+$modules = $registry->modules();
+
+$modules->each(function (ModuleConfig $module) {
+    echo $module->name . "\n";
+});
+
+// Filter modules
+$activeModules = $modules->filter(function (ModuleConfig $module) {
+    return file_exists($module->path('routes/web.php'));
+});
+```
+
+<Note>
+  The modules collection is lazy-loaded on first access and cached for subsequent calls. Use `reload()` to refresh the cache.
+</Note>
+
+### reload()
+
+Reload the modules collection from disk.
+
+```php
+public function reload(): Collection
+```
+
+<ResponseField name="return" type="Collection<int, ModuleConfig>">
+  A fresh collection of all registered module configurations
+</ResponseField>
+
+**Example:**
+
+```php
+$registry = app(ModuleRegistry::class);
+
+// Initial load
+$modules = $registry->modules();
+echo $modules->count(); // 5
+
+// Add a new module to the filesystem
+// ...
+
+// Reload to discover the new module
+$modules = $registry->reload();
+echo $modules->count(); // 6
+```
+
+<Note>
+  This method clears the internal cache and re-invokes the modules loader closure to rebuild the collection.
+</Note>
+
+## Usage Examples
+
+### Accessing the Registry
+
+The `ModuleRegistry` is bound as a singleton in the service container:
+
+```php
+use InterNACHI\Modular\Support\ModuleRegistry;
+
+$registry = app(ModuleRegistry::class);
+```
+
+### Finding Modules in Different Ways
+
+```php
+use InterNACHI\Modular\Support\ModuleRegistry;
+
+$registry = app(ModuleRegistry::class);
+
+// By name
+$blog = $registry->module('blog');
+
+// By file path
+$module = $registry->moduleForPath(__FILE__);
+
+// By class name
+$module = $registry->moduleForClass(get_class($this));
+```
+
+### Working with Module Collections
+
+```php
+$registry = app(ModuleRegistry::class);
+
+// Get all module names
+$names = $registry->modules()->pluck('name');
+
+// Find modules with specific features
+$modulesWithTests = $registry->modules()->filter(function ($module) {
+    return is_dir($module->path('tests'));
+});
+
+// Map modules to custom data
+$moduleData = $registry->modules()->map(function ($module) {
+    return [
+        'name' => $module->name,
+        'namespace' => $module->namespace(),
+        'has_routes' => file_exists($module->path('routes/web.php')),
+    ];
+});
+```
+
+## See Also
+
+- [ModuleConfig](/api/module-config) - Individual module configuration object
+- [Modules Facade](/api/modules-facade) - Convenient facade for accessing the registry

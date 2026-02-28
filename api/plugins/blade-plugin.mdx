@@ -1,0 +1,174 @@
+---
+title: BladePlugin
+description: Registers Blade components from modules with automatic namespacing
+---
+
+The `BladePlugin` automatically discovers and registers Blade components from all enabled modules, making them available in your views with module-specific prefixes.
+
+## Overview
+
+This plugin scans modules for Blade components (both class-based and anonymous) and registers them with Laravel's Blade compiler. Components are prefixed with the module name for clear namespacing.
+
+## Source Location
+
+`InterNACHI\Modular\Plugins\BladePlugin`
+
+## Activation
+
+The plugin uses the `AfterResolving` attribute to activate when Blade is resolved:
+
+```php
+#[AfterResolving(BladeCompiler::class, parameter: 'blade')]
+class BladePlugin extends Plugin
+```
+
+<Info>
+This plugin automatically activates after the Blade compiler is resolved from the service container.
+</Info>
+
+## How It Works
+
+### 1. Discovery Phase
+
+The `discover()` method finds both component files and directories:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return [
+        'files' => $finders
+            ->bladeComponentFileFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'fqcn' => $component->fullyQualifiedClassName(),
+            ])
+            ->toArray(),
+        'directories' => $finders
+            ->bladeComponentDirectoryFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'namespace' => $component->module()->qualify('View\\Components'),
+            ])
+            ->toArray(),
+    ];
+}
+```
+
+### 2. Registration Phase
+
+The `handle()` method registers components with Blade:
+
+```php
+public function handle(Collection $data)
+{
+    foreach ($data['files'] as $config) {
+        $this->blade->component($config['fqcn'], null, $config['prefix']);
+    }
+    
+    foreach ($data['directories'] as $config) {
+        $this->blade->componentNamespace($config['namespace'], $config['prefix']);
+    }
+}
+```
+
+## Component Types
+
+### Class-Based Components
+
+Class-based components are registered with their fully qualified class name:
+
+```
+app-modules/
+└── blog/
+    └── src/
+        └── View/
+            └── Components/
+                └── PostCard.php
+```
+
+Usage in Blade:
+```blade
+<x-blog::post-card :post="$post" />
+```
+
+### Anonymous Components
+
+Anonymous components in the `resources/views/components` directory are also discovered:
+
+```
+app-modules/
+└── blog/
+    └── resources/
+        └── views/
+            └── components/
+                └── alert.blade.php
+```
+
+Usage in Blade:
+```blade
+<x-blog::alert message="Success!" />
+```
+
+## Naming Convention
+
+<Note>
+All components are prefixed with the module name followed by `::` (double colon). This prevents naming conflicts between modules.
+</Note>
+
+For a module named `blog`:
+- Component: `PostCard.php`
+- Usage: `<x-blog::post-card />`
+
+For a module named `user-management`:
+- Component: `ProfileWidget.php`
+- Usage: `<x-user-management::profile-widget />`
+
+## Example Component
+
+### Class-Based Component
+
+```php
+namespace Blog\View\Components;
+
+use Illuminate\View\Component;
+
+class PostCard extends Component
+{
+    public function __construct(
+        public string $title,
+        public string $excerpt
+    ) {}
+    
+    public function render()
+    {
+        return view('blog::components.post-card');
+    }
+}
+```
+
+### Component View
+
+```blade
+<div class="post-card">
+    <h3>{{ $title }}</h3>
+    <p>{{ $excerpt }}</p>
+</div>
+```
+
+### Usage
+
+```blade
+<x-blog::post-card 
+    title="My Post" 
+    excerpt="This is a short excerpt" 
+/>
+```
+
+## Dependencies
+
+- `Illuminate\View\Compilers\BladeCompiler` - Blade compiler instance
+- `InterNACHI\Modular\Support\FinderFactory` - File discovery

@@ -1,0 +1,216 @@
+---
+title: Installation
+description: Install Laravel Modular and configure your application for modular architecture
+---
+
+## Requirements
+
+Before installing Laravel Modular, ensure your environment meets these requirements:
+
+- PHP 8.3 or higher
+- Laravel 11, 12, or dev-master/dev-main
+- Composer 2.1 or higher
+
+## Install the Package
+
+Install Laravel Modular via Composer:
+
+```bash
+composer require internachi/modular
+```
+
+Laravel will automatically discover the package and register all necessary service providers. No additional configuration is required to get started.
+
+<Note>
+The package uses Laravel's auto-discovery feature, so you don't need to manually register any service providers or facades.
+</Note>
+
+## Publish Configuration (Recommended)
+
+While not strictly required, it's **highly recommended** that you publish and customize the configuration file. This allows you to set a custom namespace for your modules, making it easier to extract them to standalone packages later.
+
+### Why Customize the Namespace?
+
+By default, modules are created in the `Modules\` namespace. While this works fine, using your organization name (like `MyCompany\` or `Acme\`) provides several benefits:
+
+- Easier to extract modules to separate packages
+- Better code organization across projects
+- Clearer ownership and provenance
+
+### Publish the Config
+
+Run the following command to publish the configuration file:
+
+```bash
+php artisan vendor:publish --tag=modular-config
+```
+
+This creates `config/app-modules.php` in your application.
+
+## Configure Your Namespace
+
+Open `config/app-modules.php` and customize the `modules_namespace` setting:
+
+```php config/app-modules.php
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Modules Namespace
+    |--------------------------------------------------------------------------
+    |
+    | This is the PHP namespace that your modules will be created in. For
+    | example, a module called "Helpers" will be placed in \Modules\Helpers
+    | by default.
+    |
+    | It is *highly recommended* that you configure this to your organization
+    | name to make extracting modules to their own package easier.
+    |
+    */
+    
+    'modules_namespace' => 'Acme', // Change from 'Modules' to your org name
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Composer "Vendor" Name
+    |--------------------------------------------------------------------------
+    |
+    | This is the prefix used for your composer.json file. This should be the
+    | kebab-case version of your module namespace (if left null, we will
+    | generate the kebab-case version for you).
+    |
+    */
+    
+    'modules_vendor' => 'acme', // e.g., 'acme' for Acme\
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Modules Directory
+    |--------------------------------------------------------------------------
+    |
+    | The directory where modules are stored. Keeping the default
+    | `app-modules/` is highly recommended.
+    |
+    */
+    
+    'modules_directory' => 'app-modules',
+    
+    /*
+    |--------------------------------------------------------------------------
+    | Base Test Case
+    |--------------------------------------------------------------------------
+    |
+    | The base TestCase class that auto-generated tests should extend.
+    |
+    */
+    
+    'tests_base' => 'Tests\\TestCase',
+];
+```
+
+### Configuration Options
+
+<AccordionGroup>
+  <Accordion title="modules_namespace">
+    The PHP namespace for your modules. For example, if set to `Acme`, a module named "blog" would use the namespace `Acme\Blog`.
+    
+    **Default:** `Modules`
+    
+    **Recommended:** Your organization or project name in StudlyCase (e.g., `Acme`, `MyCompany`)
+  </Accordion>
+  
+  <Accordion title="modules_vendor">
+    The Composer vendor prefix for your modules. This is used in the module's `composer.json` file.
+    
+    **Default:** `null` (auto-generates from `modules_namespace`)
+    
+    **Example:** `acme` for namespace `Acme`
+  </Accordion>
+  
+  <Accordion title="modules_directory">
+    The directory where modules are stored, relative to your Laravel project root.
+    
+    **Default:** `app-modules`
+    
+    **Note:** Keeping the default is recommended as it maintains alphabetical proximity to the `app/` directory.
+  </Accordion>
+  
+  <Accordion title="tests_base">
+    The fully qualified class name of your base test case class.
+    
+    **Default:** `Tests\TestCase`
+  </Accordion>
+  
+  <Accordion title="should_discover_events">
+    Override automatic event discovery. Set to `true` or `false` to explicitly enable or disable.
+    
+    **Default:** `null` (uses Laravel's default behavior)
+  </Accordion>
+  
+  <Accordion title="stubs">
+    Custom stub files for scaffolding new modules. See the customization guide for details.
+    
+    **Default:** `null` (uses built-in stubs)
+  </Accordion>
+</AccordionGroup>
+
+## Sync Project Configuration (Optional)
+
+Run the sync command to update your project configuration files:
+
+```bash
+php artisan modules:sync
+```
+
+This command updates:
+
+- **`phpunit.xml`** - Adds a test suite for your modules
+- **PhpStorm Laravel plugin config** - Registers module view paths
+
+<Tip>
+The `modules:sync` command is safe to run multiple times. It only adds missing configurations and never removes existing ones.
+</Tip>
+
+You can even add it to your `composer.json` to run automatically:
+
+```json composer.json
+{
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi",
+            "@php artisan modules:sync --ansi"
+        ]
+    }
+}
+```
+
+## Verify Installation
+
+You can verify the installation by running:
+
+```bash
+php artisan modules:list
+```
+
+This should complete without errors (and show an empty list if you haven't created any modules yet).
+
+<CodeGroup>
+```bash Expected Output (No Modules Yet)
+No modules found.
+```
+
+```bash With Modules
++------------+---------------------+
+| Module     | Path                |
++------------+---------------------+
+| blog       | app-modules/blog    |
+| shop       | app-modules/shop    |
++------------+---------------------+
+```
+</CodeGroup>
+
+## What's Next?
+
+<Card title="Create Your First Module" icon="rocket" href="/quickstart">
+  Follow the quick start guide to create and explore your first module
+</Card>

@@ -1,0 +1,223 @@
+---
+title: Creating Modules
+description: Learn how to create and structure Laravel modules
+---
+
+Modules in Laravel Modular are self-contained packages that organize your application into logical, maintainable units. Each module contains its own models, controllers, views, routes, and more.
+
+## Creating Your First Module
+
+<Steps>
+  <Step title="Generate a new module">
+    Use the `make:module` Artisan command to scaffold a new module:
+
+    ```bash
+    php artisan make:module blog
+    ```
+
+    This creates a complete module structure in `app-modules/blog/`.
+  </Step>
+
+  <Step title="Update dependencies">
+    The command automatically updates your `composer.json` file. Run composer update to register the module:
+
+    ```bash
+    composer update modules/blog
+    ```
+  </Step>
+
+  <Step title="Clear the module cache">
+    The module cache is automatically cleared, but you can manually clear it anytime:
+
+    ```bash
+    php artisan modules:clear
+    ```
+  </Step>
+</Steps>
+
+## Module Structure
+
+A freshly created module has the following structure:
+
+```
+app-modules/blog/
+├── composer.json
+├── database/
+│   ├── factories/
+│   ├── migrations/
+│   └── seeders/
+├── resources/
+│   └── views/
+├── routes/
+│   └── blog-routes.php
+├── src/
+│   └── Providers/
+│       └── BlogServiceProvider.php
+└── tests/
+```
+
+### Key Directories
+
+<AccordionGroup>
+  <Accordion title="src/ - Source Code">
+    Contains all your PHP classes:
+    - `Controllers/` - HTTP controllers
+    - `Models/` - Eloquent models
+    - `View/Components/` - Blade components
+    - `Providers/` - Service providers
+    - `Console/Commands/` - Artisan commands
+  </Accordion>
+
+  <Accordion title="routes/ - Route Definitions">
+    All PHP files in this directory are automatically loaded. Routes are loaded alphabetically by filename.
+  </Accordion>
+
+  <Accordion title="resources/ - Views and Assets">
+    - `views/` - Blade templates with automatic namespacing
+    - `lang/` - Translation files
+  </Accordion>
+
+  <Accordion title="database/ - Database Files">
+    - `migrations/` - Database migrations
+    - `factories/` - Model factories
+    - `seeders/` - Database seeders
+  </Accordion>
+</AccordionGroup>
+
+## Module Configuration
+
+### Composer.json
+
+Each module has its own `composer.json` file that defines its namespace and autoloading:
+
+```json composer.json
+{
+  "name": "modules/blog",
+  "description": "",
+  "type": "library",
+  "version": "1.0",
+  "license": "proprietary",
+  "require": {},
+  "autoload": {
+    "psr-4": {
+      "Modules\\Blog\\": "src/",
+      "Modules\\Blog\\Tests\\": "tests/",
+      "Modules\\Blog\\Database\\Factories\\": "database/factories/",
+      "Modules\\Blog\\Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Blog\\Providers\\BlogServiceProvider"
+      ]
+    }
+  }
+}
+```
+
+<Note>
+  The namespace prefix (`Modules`) can be customized in your `config/app-modules.php` file.
+</Note>
+
+### Service Provider
+
+Every module includes a service provider that's automatically registered:
+
+```php src/Providers/BlogServiceProvider.php
+<?php
+
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Register bindings, singletons, etc.
+    }
+
+    public function boot(): void
+    {
+        // Boot services, publish assets, etc.
+    }
+}
+```
+
+## Namespace Configuration
+
+<Warning>
+  Consider customizing your module namespace before creating your first module to avoid future refactoring.
+</Warning>
+
+By default, modules use the `Modules` namespace. You can customize this by publishing the config:
+
+```bash
+php artisan vendor:publish --tag=modular-config
+```
+
+Then edit `config/app-modules.php`:
+
+```php config/app-modules.php
+return [
+    'modules_namespace' => 'MyCompany',
+    'modules_vendor' => 'my-company',
+    'modules_directory' => 'app-modules',
+];
+```
+
+<Tip>
+  Use your organization name as the namespace (e.g., `Acme`, `MyCompany`) to make it easier to extract modules into standalone packages later.
+</Tip>
+
+## Working with Modules
+
+### List All Modules
+
+View all registered modules:
+
+```bash
+php artisan modules:list
+```
+
+### Cache Module Configuration
+
+For better performance in production, cache your module configuration:
+
+```bash
+php artisan modules:cache
+```
+
+Clear the cache during development:
+
+```bash
+php artisan modules:clear
+```
+
+### Sync Modules
+
+If you manually add or remove modules, sync the composer configuration:
+
+```bash
+php artisan modules:sync
+```
+
+## Next Steps
+
+Now that you understand module structure, learn about specific components:
+
+<CardGroup cols={2}>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Create models, controllers, and other components
+  </Card>
+  <Card title="Module Routing" icon="route" href="/guides/module-routing">
+    Define routes within your modules
+  </Card>
+  <Card title="Module Views" icon="eye" href="/guides/module-views">
+    Work with Blade templates and components
+  </Card>
+  <Card title="Module Migrations" icon="database" href="/guides/module-migrations">
+    Manage database migrations
+  </Card>
+</CardGroup>

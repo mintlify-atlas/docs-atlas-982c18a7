@@ -1,0 +1,554 @@
+---
+title: Upgrading
+description: Guide for upgrading between Laravel Modular versions
+---
+
+## Upgrading to 3.0
+
+Version 3.0 introduces a plugin-based architecture for module auto-discovery, replacing the monolithic service provider with focused, composable plugin classes.
+
+### Requirements
+
+<Warning>
+  Version 3.0 has stricter requirements than previous versions.
+</Warning>
+
+| Requirement | Version 2.x | Version 3.0 |
+|-------------|-------------|-------------|
+| PHP | 8.0+ | **8.3+** |
+| Laravel | 9, 10, 11 | **11+** |
+
+### Breaking Changes
+
+#### Removed Features
+
+<Steps>
+
+<Step title="ModularEventServiceProvider">
+  **Removed:** `ModularEventServiceProvider`
+  
+  **Replacement:** `EventsPlugin` (auto-registered)
+  
+  If you extended `ModularEventServiceProvider`, remove it from your code. Event discovery is now handled automatically by the `EventsPlugin`.
+  
+  ```php
+  // Remove this from your code
+  use InterNACHI\Modular\Support\ModularEventServiceProvider;
+  ```
+</Step>
+
+<Step title="AutoDiscoveryHelper">
+  **Removed:** `AutoDiscoveryHelper`
+  
+  **Replacement:** `FinderFactory`
+  
+  **Before:**
+  ```php
+  use InterNACHI\Modular\Support\AutoDiscoveryHelper;
+  
+  $files = AutoDiscoveryHelper::discover($paths);
+  ```
+  
+  **After:**
+  ```php
+  use InterNACHI\Modular\Support\FinderFactory;
+  
+  $finders = app(FinderFactory::class);
+  $files = $finders->forModule($module)->in('src/Models');
+  ```
+</Step>
+
+<Step title="ModuleRegistry::getCachePath()">
+  **Removed:** `ModuleRegistry::getCachePath()`
+  
+  **Replacement:** `Cache::path()`
+  
+  **Before:**
+  ```php
+  $path = ModuleRegistry::getCachePath();
+  ```
+  
+  **After:**
+  ```php
+  use InterNACHI\Modular\Support\Cache;
+  
+  $path = Cache::path();
+  ```
+</Step>
+
+<Step title="Livewire Integration">
+  **Removed:** `make:livewire --module` built-in support
+  
+  **Replacement:** Install separate package
+  
+  ```bash
+  composer require internachi/modular-livewire
+  ```
+  
+  The `modular-livewire` package provides the same functionality as before.
+</Step>
+
+<Step title="Breadcrumbs Integration">
+  **Removed:** Built-in breadcrumbs integration
+  
+  **Replacement:** Manual registration in service provider
+  
+  If you use breadcrumbs, register them manually in your module's service provider:
+  
+  ```php
+  public function boot(): void
+  {
+      if (class_exists(\Diglactic\Breadcrumbs\Breadcrumbs::class)) {
+          require __DIR__.'/../../routes/breadcrumbs.php';
+      }
+  }
+  ```
+</Step>
+
+</Steps>
+
+#### Cache Changes
+
+<Warning>
+  The cache file location and structure have changed in version 3.0.
+</Warning>
+
+| Aspect | Version 2.x | Version 3.0 |
+|--------|-------------|-------------|
+| **Cache file** | `bootstrap/cache/modules.php` | `bootstrap/cache/app-modules.php` |
+| **Cache content** | Module paths only | All plugin discovery data |
+
+**Migration:** Clear your cache after upgrading:
+
+```bash
+php artisan modules:clear
+```
+
+The old `bootstrap/cache/modules.php` file can be safely deleted.
+
+### New Architecture
+
+#### Plugin System
+
+Version 3.0 introduces a plugin-based architecture for better extensibility and separation of concerns.
+
+**Core Classes:**
+
+```
+PluginRegistry       → Registration point for plugins
+PluginHandler        → Orchestrates plugin lifecycle
+PluginDataRepository → Manages discovery data (cached or fresh)
+Cache                → File I/O for unified cache
+Finder Factory       → Creates FinderCollection instances
+ModuleFileInfo       → Decorator with module() and fullyQualifiedClassName()
+```
+
+**Plugin Base Class:**
+
+```php
+abstract class Plugin
+{
+    abstract public function discover(FinderFactory $finders): iterable;
+    abstract public function handle(Collection $data): void;
+}
+```
+
+#### Built-in Plugins
+
+All module functionality is now handled by specialized plugins:
+
+| Plugin | Responsibility |
+|--------|----------------|
+| `ModulesPlugin` | Discover `composer.json`, create `ModuleConfig` |
+| `RoutesPlugin` | Load route files |
+| `ViewPlugin` | Register view namespaces |
+| `BladePlugin` | Register Blade components |
+| `TranslatorPlugin` | Register translations |
+| `EventsPlugin` | Discover event listeners |
+| `MigratorPlugin` | Register migration paths |
+| `GatePlugin` | Register model policies |
+| `ArtisanPlugin` | Register commands |
+
+#### PHP 8 Attributes
+
+Plugins use attributes to control their lifecycle:
+
+```php
+use InterNACHI\Modular\Plugins\Attributes\AfterResolving;
+use InterNACHI\Modular\Plugins\Attributes\OnBoot;
+
+#[AfterResolving(ViewFactory::class)]
+class ViewPlugin extends Plugin
+{
+    // Plugin implementation
+}
+
+#[OnBoot]
+class EagerPlugin extends Plugin
+{
+    // Plugin implementation
+}
+```
+
+| Attribute | Behavior |
+|-----------|----------|
+| `#[AfterResolving(Service::class)]` | Defer until service is resolved |
+| `#[OnBoot]` | Execute during `booting()` hook |
+| *(none)* | Explicit call via `PluginHandler::handle()` |
+
+### Migration Steps
+
+<Steps>
+
+<Step title="Check Requirements">
+  Ensure your environment meets the new requirements:
+  
+  ```bash
+  php -v  # Should be 8.3 or higher
+  php artisan --version  # Should be Laravel 11.x
+  ```
+  
+  If you're on older versions:
+  - For Laravel 9/10: Stay on Modular 2.x
+  - For PHP 8.0-8.2: Stay on Modular 2.x
+</Step>
+
+<Step title="Clear Module Cache">
+  Before upgrading, clear the existing cache:
+  
+  ```bash
+  php artisan modules:clear
+  ```
+</Step>
+
+<Step title="Update Composer">
+  Update the package:
+  
+  ```bash
+  composer update internachi/modular
+  ```
+  
+  If you get dependency conflicts, you may need to upgrade Laravel first:
+  
+  ```bash
+  composer require laravel/framework:^11.0
+  ```
+</Step>
+
+<Step title="Install Livewire Package (if needed)">
+  If you use Livewire with modules:
+  
+  ```bash
+  composer require internachi/modular-livewire
+  ```
+</Step>
+
+<Step title="Update Code References">
+  Search your codebase for removed classes and update them:
+  
+  **AutoDiscoveryHelper → FinderFactory:**
+  ```bash
+  # Search for usage
+  grep -r "AutoDiscoveryHelper" app-modules/
+  ```
+  
+  **ModularEventServiceProvider:**
+  ```bash
+  # Search for extensions
+  grep -r "ModularEventServiceProvider" app-modules/
+  ```
+  
+  **ModuleRegistry::getCachePath():**
+  ```bash
+  # Search for usage
+  grep -r "getCachePath" app-modules/
+  ```
+</Step>
+
+<Step title="Update Breadcrumbs (if used)">
+  If you use breadcrumbs, add manual registration:
+  
+  ```php
+  // In your module's service provider
+  public function boot(): void
+  {
+      if (class_exists(\Diglactic\Breadcrumbs\Breadcrumbs::class)) {
+          require __DIR__.'/../../routes/breadcrumbs.php';
+      }
+  }
+  ```
+</Step>
+
+<Step title="Test Your Application">
+  Run your test suite to ensure everything works:
+  
+  ```bash
+  php artisan test
+  ```
+  
+  Pay special attention to:
+  - Event listeners
+  - Module discovery
+  - Custom discovery code
+</Step>
+
+<Step title="Rebuild Cache">
+  Generate the new cache format:
+  
+  ```bash
+  php artisan modules:cache
+  ```
+</Step>
+
+<Step title="Clean Up Old Cache">
+  Remove the old cache file:
+  
+  ```bash
+  rm bootstrap/cache/modules.php
+  ```
+</Step>
+
+</Steps>
+
+### New Features in 3.0
+
+#### Laravel Optimize Integration
+
+Modular now integrates with Laravel's optimize commands:
+
+```bash
+# Optimize will run modules:cache automatically
+php artisan optimize
+
+# Optimize:clear will run modules:clear automatically
+php artisan optimize:clear
+```
+
+#### Custom Plugins
+
+You can now create custom plugins to extend module discovery:
+
+```php
+use InterNACHI\Modular\Plugins\Plugin;
+use InterNACHI\Modular\Support\FinderFactory;
+use Illuminate\Support\Collection;
+
+class CustomPlugin extends Plugin
+{
+    public function discover(FinderFactory $finders): iterable
+    {
+        // Return discovery data
+        return [];
+    }
+    
+    public function handle(Collection $data): void
+    {
+        // Handle discovered data
+    }
+}
+```
+
+Register in a service provider:
+
+```php
+use InterNACHI\Modular\Support\PluginRegistry;
+
+public function register(): void
+{
+    PluginRegistry::register(CustomPlugin::class);
+}
+```
+
+Custom plugins:
+- Must extend `InterNACHI\Modular\Plugins\Plugin`
+- Are automatically integrated into caching
+- Can use lifecycle attributes
+- Share the unified cache with built-in plugins
+
+#### Auto-Aliasing in Tinker
+
+Modular now supports auto-aliasing module classes in Tinker sessions, making it easier to work with module classes interactively.
+
+## Upgrading to 2.0
+
+Version 2.0 dropped support for older versions of PHP and Laravel.
+
+### Requirements
+
+| Requirement | Version 1.x | Version 2.0 |
+|-------------|-------------|-------------|
+| PHP | 7.3+ | **8.0+** |
+| Laravel | 7, 8, 9, 10 | **9, 10, 11** |
+
+### Breaking Changes
+
+<Warning>
+  No API changes were introduced in 2.0, only version requirement updates.
+</Warning>
+
+If you're using PHP 7 or Laravel 7/8, you must stay on the 1.x releases.
+
+### Migration Steps
+
+<Steps>
+
+<Step title="Update PHP">
+  Ensure you're running PHP 8.0 or higher:
+  
+  ```bash
+  php -v
+  ```
+</Step>
+
+<Step title="Update Laravel">
+  Ensure you're running Laravel 9 or higher:
+  
+  ```bash
+  php artisan --version
+  ```
+</Step>
+
+<Step title="Update Package">
+  Update Modular:
+  
+  ```bash
+  composer update internachi/modular
+  ```
+</Step>
+
+</Steps>
+
+## Version History
+
+### Version 2.2.0 (2024-04-05)
+
+**Added:**
+- PhpStorm exclude path support in `modules:sync` command
+- Prevents double-registration of modules in IDE
+
+### Version 2.1.0 (2024-03-18)
+
+**Added:**
+- Laravel 11 support
+- Event discovery support
+
+**Fixed:**
+- Error with module command signatures
+
+### Version 2.0.0 (2023-05-19)
+
+**Changed:**
+- Dropped support for PHP 7.x
+- Dropped support for Laravel 7 and 8
+
+### Version 1.12.0 (2023-05-19)
+
+**Added:**
+- Factory model name resolution inside modules
+
+**Fixed:**
+- Support for new `make:command` changes in Laravel 10
+
+### Version 1.11.0 (2023-02-14)
+
+**Added:**
+- Laravel 10 support
+
+### Version 1.10.0 (2022-08-12)
+
+**Fixed:**
+- Improved path normalization on Windows
+
+### Version 1.9.0 (2022-07-06)
+
+**Fixed:**
+- `make:migration` and `make:livewire` now properly load `--module` option
+- Unknown module with `--module` flag now triggers console error
+
+**Added:**
+- Additional tests for `make:` commands
+
+### Version 1.8.0 (2022-06-04)
+
+**Added:**
+- Blade component namespaces (e.g., `<x-module::component />`)
+
+**Fixed:**
+- Issue with `make:seeder` command in Laravel 9.6.0+
+
+### Version 1.7.0 (2022-02-11)
+
+**Added:**
+- Laravel 9 support
+
+### Version 1.6.0
+
+**Added:**
+- Custom module stubs support
+
+**Fixed:**
+- Only register `make:livewire` integration if Livewire is installed
+
+### Version 1.5.0
+
+**Added:**
+- Livewire `make:livewire` command support
+- `make:cast` command support
+- PhpStorm library roots syncing
+
+### Version 1.4.0
+
+**Added:**
+- `--module` flag support in `php artisan db:seed`
+
+**Fixed:**
+- Seeders created in correct namespace (Laravel 8+)
+- Factories created in correct namespace (Laravel 8+)
+- Module namespace applied to models when creating factories
+
+### Version 1.3.0
+
+**Added:**
+- Translation support in modules
+
+**Changed:**
+- Switched to `diglactic/laravel-breadcrumbs`
+
+### Version 1.2.0
+
+**Added:**
+- Laravel 8 factory class auto-registration
+
+**Fixed:**
+- Better Windows support
+- Composer 2.0 support
+- Improved file scanning efficiency
+
+### Version 1.1.0
+
+**Added:**
+- `make:component` command support
+- Component auto-discovery
+- PhpStorm config file updates in `modules:sync`
+- Partial `--all` support for `make:model`
+
+**Changed:**
+- Single `app-modules/*` composer repository instead of per-module repositories
+- Moved tests from `autoload-dev` to `autoload`
+
+### Version 1.0.0
+
+**Added:**
+- Initial release
+
+## Staying Updated
+
+To stay informed about new releases:
+
+- Watch the [GitHub repository](https://github.com/InterNACHI/modular)
+- Check the [CHANGELOG.md](https://github.com/InterNACHI/modular/blob/main/CHANGELOG.md)
+- Follow [@inxilpro on Twitter](https://twitter.com/inxilpro)
+
+<Note>
+  Always review the changelog and test thoroughly in a development environment before upgrading production applications.
+</Note>

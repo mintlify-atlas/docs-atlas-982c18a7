@@ -1,0 +1,129 @@
+---
+title: ArtisanPlugin
+description: Automatically discovers and registers Artisan commands from modules
+---
+
+The `ArtisanPlugin` automatically discovers and registers Artisan console commands from all enabled modules. It also configures Laravel Tinker to include module namespaces.
+
+## Overview
+
+This plugin scans each module's `src/Console/Commands` directory for command classes and registers them with Laravel's Artisan console. It executes during Artisan's startup process.
+
+## Source Location
+
+`InterNACHI\Modular\Plugins\ArtisanPlugin`
+
+## How It Works
+
+### 1. Boot Process
+
+The plugin hooks into Artisan's starting event:
+
+```php
+public static function boot(Closure $handler, Application $app): void
+{
+    Artisan::starting(fn($artisan) => $handler(static::class, ['artisan' => $artisan]));
+}
+```
+
+### 2. Discovery Phase
+
+The `discover()` method finds all command classes in modules:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->commandFileFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $file) => $file->fullyQualifiedClassName())
+        ->filter($this->isInstantiableCommand(...));
+}
+```
+
+<Info>
+The plugin only registers commands that:
+- Extend `Illuminate\Console\Command`
+- Are not abstract classes
+</Info>
+
+### 3. Registration Phase
+
+The `handle()` method registers discovered commands:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $fqcn) => $this->artisan->resolve($fqcn));
+    
+    $this->registerNamespacesInTinker();
+}
+```
+
+## Tinker Integration
+
+The plugin automatically configures Laravel Tinker to include module namespaces:
+
+```php
+protected function registerNamespacesInTinker(): void
+{
+    if (! class_exists('Laravel\\Tinker\\TinkerServiceProvider')) {
+        return;
+    }
+    
+    $namespaces = $this->registry
+        ->modules()
+        ->flatMap(fn(ModuleConfig $config) => $config->namespaces)
+        ->reject(fn($ns) => Str::endsWith($ns, ['Tests\\', 'Database\\Factories\\', 'Database\\Seeders\\']))
+        ->values()
+        ->all();
+    
+    Config::set('tinker.alias', array_merge($namespaces, Config::get('tinker.alias', [])));
+}
+```
+
+<Note>
+Test, factory, and seeder namespaces are automatically excluded from Tinker aliases to keep the REPL environment clean.
+</Note>
+
+## Expected Module Structure
+
+For commands to be discovered, they must be located in:
+
+```
+app-modules/
+└── your-module/
+    └── src/
+        └── Console/
+            └── Commands/
+                └── YourCommand.php
+```
+
+## Example Command
+
+```php
+namespace YourModule\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class YourCommand extends Command
+{
+    protected $signature = 'your-module:action';
+    
+    protected $description = 'Perform an action';
+    
+    public function handle()
+    {
+        $this->info('Command executed!');
+    }
+}
+```
+
+Once placed in the correct directory, this command will be automatically discovered and available via `php artisan your-module:action`.
+
+## Dependencies
+
+- `Illuminate\Console\Application` - Artisan console
+- `InterNACHI\Modular\Support\ModuleRegistry` - Module registry
+- `InterNACHI\Modular\Support\FinderFactory` - File discovery

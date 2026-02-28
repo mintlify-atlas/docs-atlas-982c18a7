@@ -1,0 +1,238 @@
+---
+title: RoutesPlugin
+description: Automatically loads route files from modules
+---
+
+The `RoutesPlugin` automatically discovers and loads route files from all enabled modules, integrating module routes into your Laravel application's routing system.
+
+## Overview
+
+This plugin scans each module for route files and loads them into the application. It respects Laravel's route caching and only loads routes when they haven't been cached.
+
+## Source Location
+
+`InterNACHI\Modular\Plugins\RoutesPlugin`
+
+## How It Works
+
+### 1. Boot Process
+
+The plugin checks if routes are cached before loading:
+
+```php
+public static function boot(Closure $handler, Application $app): void
+{
+    if (! $app->routesAreCached()) {
+        $handler(static::class);
+    }
+}
+```
+
+<Info>
+When routes are cached, this plugin doesn't run. This is the same behavior as Laravel's standard route loading.
+</Info>
+
+### 2. Discovery Phase
+
+The `discover()` method finds all route files:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->routeFileFinder()
+        ->values()
+        ->map(fn(SplFileInfo $file) => $file->getRealPath());
+}
+```
+
+### 3. Loading Phase
+
+The `handle()` method requires each route file:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $filename) => require $filename);
+}
+```
+
+## Expected Module Structure
+
+Route files should be located in your module's `routes` directory:
+
+```
+app-modules/
+└── your-module/
+    └── routes/
+        ├── web.php
+        ├── api.php
+        └── console.php
+```
+
+## Example Route Files
+
+### Web Routes
+
+`routes/web.php`:
+
+```php
+use Illuminate\Support\Facades\Route;
+use YourModule\Http\Controllers\PostController;
+
+Route::middleware('web')->group(function () {
+    Route::get('/posts', [PostController::class, 'index'])
+        ->name('posts.index');
+    
+    Route::get('/posts/{post}', [PostController::class, 'show'])
+        ->name('posts.show');
+    
+    Route::middleware('auth')->group(function () {
+        Route::get('/posts/create', [PostController::class, 'create'])
+            ->name('posts.create');
+        
+        Route::post('/posts', [PostController::class, 'store'])
+            ->name('posts.store');
+    });
+});
+```
+
+### API Routes
+
+`routes/api.php`:
+
+```php
+use Illuminate\Support\Facades\Route;
+use YourModule\Http\Controllers\Api\PostController;
+
+Route::prefix('api')->middleware('api')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+### Console Routes
+
+`routes/console.php`:
+
+```php
+use Illuminate\Support\Facades\Artisan;
+
+Artisan::command('your-module:process', function () {
+    $this->info('Processing data...');
+})->describe('Process module data');
+```
+
+## Route Organization
+
+### Prefix Convention
+
+Consider prefixing your routes with the module name to avoid conflicts:
+
+```php
+Route::prefix('blog')->name('blog.')->group(function () {
+    Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
+    // Generates route name: blog.posts.index
+    // Generates URL: /blog/posts
+});
+```
+
+### Named Routes
+
+Use descriptive route names that include the module context:
+
+```php
+Route::get('/posts', [PostController::class, 'index'])
+    ->name('blog.posts.index');
+
+// Later in your code:
+return redirect()->route('blog.posts.index');
+```
+
+## Middleware
+
+<Note>
+Module routes have access to all globally registered middleware and can define route-specific middleware as needed.
+</Note>
+
+```php
+Route::middleware(['web', 'auth'])->group(function () {
+    // Routes requiring authentication
+});
+```
+
+## Route Caching
+
+Module routes work with Laravel's route caching:
+
+```bash
+# Cache all routes (including module routes)
+php artisan route:cache
+
+# Clear cached routes
+php artisan route:clear
+```
+
+When routes are cached, the plugin doesn't run and Laravel loads routes from the cache file.
+
+## Route Discovery
+
+By default, the plugin looks for these common route files:
+- `routes/web.php`
+- `routes/api.php`
+- `routes/console.php`
+
+You can create additional route files as needed - any `.php` file in the `routes` directory will be loaded.
+
+## Best Practices
+
+### 1. Use Route Groups
+
+Group related routes together:
+
+```php
+Route::prefix('admin')->middleware('admin')->group(function () {
+    // Admin routes
+});
+```
+
+### 2. Consistent Naming
+
+Use consistent route naming conventions:
+
+```php
+Route::name('blog.')->group(function () {
+    Route::get('/posts', ...)->name('posts.index');
+    Route::get('/posts/{post}', ...)->name('posts.show');
+});
+```
+
+### 3. Controller Namespacing
+
+Import controllers at the top of your route files:
+
+```php
+use YourModule\Http\Controllers\PostController;
+use YourModule\Http\Controllers\CommentController;
+
+Route::resource('posts', PostController::class);
+Route::resource('comments', CommentController::class);
+```
+
+## Viewing Routes
+
+List all registered routes (including module routes):
+
+```bash
+php artisan route:list
+```
+
+Filter by name:
+
+```bash
+php artisan route:list --name=blog
+```
+
+## Dependencies
+
+- `Illuminate\Foundation\Application` - Laravel application instance
+- `InterNACHI\Modular\Support\FinderFactory` - File discovery

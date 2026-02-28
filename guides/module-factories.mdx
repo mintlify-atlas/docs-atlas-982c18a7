@@ -1,0 +1,564 @@
+---
+title: Module Factories
+description: Create and use model factories within Laravel modules
+---
+
+Laravel Modular provides automatic factory loading and namespace resolution for model factories within modules, making it easy to generate test data.
+
+## Creating Factories
+
+Create a factory for a module model using the `--module` flag:
+
+```bash
+php artisan make:factory PostFactory --module=blog
+```
+
+This creates a factory in:
+```
+app-modules/blog/database/factories/PostFactory.php
+```
+
+<Tip>
+  Create a model with its factory in one command:
+  
+  ```bash
+  php artisan make:model Post --module=blog --factory
+  ```
+  
+  Or use the shorthand: `php artisan make:model Post --module=blog -f`
+</Tip>
+
+## Factory Structure
+
+Module factories follow the standard Laravel factory pattern:
+
+```php app-modules/blog/database/factories/PostFactory.php
+<?php
+
+namespace Modules\Blog\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Blog\Models\Post;
+use Illuminate\Support\Str;
+
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    public function definition(): array
+    {
+        $title = fake()->sentence();
+        
+        return [
+            'title' => $title,
+            'slug' => Str::slug($title),
+            'excerpt' => fake()->paragraph(),
+            'content' => fake()->paragraphs(5, true),
+            'published_at' => fake()->dateTimeBetween('-1 year', 'now'),
+        ];
+    }
+}
+```
+
+## Using Factories
+
+### In Tests
+
+Use factories in your tests to create test data:
+
+```php app-modules/blog/tests/PostTest.php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Blog\Models\Post;
+
+class PostTest extends TestCase
+{
+    use RefreshDatabase;
+    
+    public function test_can_create_post()
+    {
+        $post = Post::factory()->create();
+        
+        $this->assertDatabaseHas('posts', [
+            'id' => $post->id,
+        ]);
+    }
+    
+    public function test_can_create_multiple_posts()
+    {
+        $posts = Post::factory()->count(5)->create();
+        
+        $this->assertCount(5, $posts);
+        $this->assertEquals(5, Post::count());
+    }
+}
+```
+
+### In Seeders
+
+Use factories in seeders:
+
+```php app-modules/blog/database/seeders/PostSeeder.php
+<?php
+
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Modules\Blog\Models\Post;
+
+class PostSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Post::factory()->count(50)->create();
+    }
+}
+```
+
+### In Tinker
+
+Use factories in `php artisan tinker`:
+
+```php
+>>> use Modules\Blog\Models\Post;
+>>> Post::factory()->count(10)->create();
+```
+
+## Factory States
+
+Define different states for your factories:
+
+```php app-modules/blog/database/factories/PostFactory.php
+<?php
+
+namespace Modules\Blog\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Blog\Models\Post;
+
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    public function definition(): array
+    {
+        return [
+            'title' => fake()->sentence(),
+            'content' => fake()->paragraphs(3, true),
+            'published_at' => null,
+        ];
+    }
+    
+    /**
+     * Indicate that the post is published.
+     */
+    public function published(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'published_at' => fake()->dateTimeBetween('-1 year', 'now'),
+        ]);
+    }
+    
+    /**
+     * Indicate that the post is a draft.
+     */
+    public function draft(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'published_at' => null,
+        ]);
+    }
+    
+    /**
+     * Indicate that the post is featured.
+     */
+    public function featured(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'featured' => true,
+        ]);
+    }
+}
+```
+
+### Using States
+
+```php
+// Create published posts
+$posts = Post::factory()->published()->count(10)->create();
+
+// Create draft posts
+$drafts = Post::factory()->draft()->count(5)->create();
+
+// Create featured, published posts
+$featured = Post::factory()->published()->featured()->count(3)->create();
+
+// Chain multiple states
+$post = Post::factory()
+    ->published()
+    ->featured()
+    ->create(['title' => 'Special Post']);
+```
+
+## Factory Relationships
+
+Define relationships within factories:
+
+### Belongs To
+
+```php app-modules/blog/database/factories/PostFactory.php
+<?php
+
+namespace Modules\Blog\Database\Factories;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Blog\Models\Post;
+use Modules\Blog\Models\Category;
+use App\Models\User;
+
+class PostFactory extends Factory
+{
+    protected $model = Post::class;
+
+    public function definition(): array
+    {
+        return [
+            'title' => fake()->sentence(),
+            'content' => fake()->paragraphs(3, true),
+            'user_id' => User::factory(),
+            'category_id' => Category::factory(),
+            'published_at' => fake()->dateTimeBetween('-1 year', 'now'),
+        ];
+    }
+}
+```
+
+Now creating a post automatically creates related models:
+
+```php
+// Creates a post, a user, and a category
+$post = Post::factory()->create();
+
+// Use existing user
+$user = User::find(1);
+$post = Post::factory()->create(['user_id' => $user->id]);
+
+// Or use the for() method
+$post = Post::factory()->for($user)->create();
+```
+
+### Has Many
+
+Create models with related children:
+
+```php
+// Create a post with 5 comments
+$post = Post::factory()
+    ->has(Comment::factory()->count(5))
+    ->create();
+
+// Using the magic method
+$post = Post::factory()
+    ->hasComments(5)
+    ->create();
+
+// With custom attributes
+$post = Post::factory()
+    ->hasComments(3, ['approved' => true])
+    ->create();
+```
+
+### Many to Many
+
+For many-to-many relationships:
+
+```php
+// Create a post with tags
+$post = Post::factory()
+    ->hasAttached(Tag::factory()->count(3))
+    ->create();
+
+// With pivot data
+$post = Post::factory()
+    ->hasAttached(
+        Tag::factory()->count(3),
+        ['created_at' => now()]
+    )
+    ->create();
+```
+
+## Factory Callbacks
+
+Use callbacks to perform actions after model creation:
+
+```php app-modules/blog/database/factories/PostFactory.php
+public function definition(): array
+{
+    return [
+        'title' => fake()->sentence(),
+        'content' => fake()->paragraphs(3, true),
+    ];
+}
+
+/**
+ * Configure the model factory.
+ */
+public function configure(): static
+{
+    return $this->afterCreating(function (Post $post) {
+        // Generate a thumbnail after creating
+        $post->generateThumbnail();
+    });
+}
+```
+
+### AfterMaking and AfterCreating
+
+```php
+public function configure(): static
+{
+    return $this
+        ->afterMaking(function (Post $post) {
+            // Runs after make() - model not yet in database
+            $post->slug = Str::slug($post->title);
+        })
+        ->afterCreating(function (Post $post) {
+            // Runs after create() - model is in database
+            $post->generateSearchIndex();
+        });
+}
+```
+
+## Automatic Factory Resolution
+
+Laravel Modular automatically resolves factory names for module models. This happens through the `DatabaseFactoryHelper`:
+
+```php
+// When you call this:
+Post::factory()
+
+// Laravel Modular automatically finds:
+Modules\Blog\Database\Factories\PostFactory
+```
+
+This works because of automatic namespace resolution configured in the module's `composer.json`:
+
+```json composer.json
+{
+  "autoload": {
+    "psr-4": {
+      "Modules\\Blog\\Database\\Factories\\": "database/factories/"
+    }
+  }
+}
+```
+
+<Note>
+  Factory autoloading is registered automatically when the module is installed via Composer.
+</Note>
+
+## Nested Model Factories
+
+Organize factories in subdirectories for complex modules:
+
+```
+app-modules/blog/
+└── database/
+    └── factories/
+        ├── PostFactory.php
+        ├── CategoryFactory.php
+        └── Media/
+            ├── ImageFactory.php
+            └── VideoFactory.php
+```
+
+Namespace them accordingly:
+
+```php app-modules/blog/database/factories/Media/ImageFactory.php
+<?php
+
+namespace Modules\Blog\Database\Factories\Media;
+
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Blog\Models\Media\Image;
+
+class ImageFactory extends Factory
+{
+    protected $model = Image::class;
+    
+    // ...
+}
+```
+
+## Testing with Factories
+
+### Basic Tests
+
+```php
+public function test_post_has_required_fields()
+{
+    $post = Post::factory()->create([
+        'title' => 'Test Title',
+    ]);
+    
+    $this->assertEquals('Test Title', $post->title);
+    $this->assertNotNull($post->slug);
+    $this->assertNotNull($post->content);
+}
+```
+
+### Testing Relationships
+
+```php
+public function test_post_belongs_to_user()
+{
+    $user = User::factory()->create();
+    $post = Post::factory()->for($user)->create();
+    
+    $this->assertEquals($user->id, $post->user_id);
+    $this->assertTrue($post->user->is($user));
+}
+
+public function test_post_has_comments()
+{
+    $post = Post::factory()
+        ->hasComments(3)
+        ->create();
+    
+    $this->assertCount(3, $post->comments);
+}
+```
+
+### Testing States
+
+```php
+public function test_published_scope_only_returns_published_posts()
+{
+    Post::factory()->published()->count(5)->create();
+    Post::factory()->draft()->count(3)->create();
+    
+    $published = Post::published()->get();
+    
+    $this->assertCount(5, $published);
+    $this->assertTrue($published->every(fn($post) => $post->isPublished()));
+}
+```
+
+## Seeding with Factories
+
+Use factories in database seeders:
+
+```php app-modules/blog/database/seeders/DatabaseSeeder.php
+<?php
+
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Modules\Blog\Models\Post;
+use Modules\Blog\Models\Category;
+use App\Models\User;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Create categories
+        $categories = Category::factory()->count(5)->create();
+        
+        // Create users
+        $users = User::factory()->count(10)->create();
+        
+        // Create posts for each user
+        $users->each(function ($user) use ($categories) {
+            Post::factory()
+                ->count(rand(3, 8))
+                ->for($user)
+                ->for($categories->random())
+                ->create();
+        });
+        
+        // Create some featured posts
+        Post::factory()
+            ->published()
+            ->featured()
+            ->count(5)
+            ->create();
+    }
+}
+```
+
+Run the seeder:
+
+```bash
+php artisan db:seed --class="Modules\Blog\Database\Seeders\DatabaseSeeder"
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Realistic Fake Data">
+    Make test data realistic with Faker:
+    
+    ```php
+    'title' => fake()->sentence(),
+    'email' => fake()->unique()->safeEmail(),
+    'published_at' => fake()->dateTimeBetween('-1 year', 'now'),
+    ```
+  </Accordion>
+
+  <Accordion title="Define Factory States">
+    Create states for common variations:
+    
+    ```php
+    Post::factory()->published()->create();
+    Post::factory()->draft()->create();
+    Post::factory()->featured()->create();
+    ```
+  </Accordion>
+
+  <Accordion title="Use Sequences for Variations">
+    Create variations with sequences:
+    
+    ```php
+    Post::factory()
+        ->count(3)
+        ->sequence(
+            ['status' => 'draft'],
+            ['status' => 'published'],
+            ['status' => 'archived'],
+        )
+        ->create();
+    ```
+  </Accordion>
+
+  <Accordion title="Keep Factories Maintainable">
+    Update factories when you change models:
+    
+    ```php
+    // When you add a new required field to posts table
+    // Update the factory definition immediately
+    public function definition(): array
+    {
+        return [
+            // ... existing fields
+            'new_required_field' => fake()->word(),
+        ];
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Migrations" icon="database" href="/guides/module-migrations">
+    Learn about database migrations in modules
+  </Card>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Create models and other components
+  </Card>
+</CardGroup>

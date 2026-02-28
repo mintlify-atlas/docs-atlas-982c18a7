@@ -1,0 +1,404 @@
+---
+title: modules:sync
+description: Sync your project configuration with current modules for PHPUnit and PhpStorm
+---
+
+The `modules:sync` command automatically updates your project's configuration files to include all registered modules, ensuring your IDE and testing tools properly recognize module code.
+
+## Usage
+
+```bash
+php artisan modules:sync
+```
+
+## Options
+
+<ParamField path="--no-phpstorm" type="boolean">
+  Skip updating PhpStorm configuration files.
+  
+  Use this if you don't use PhpStorm or want to prevent IDE config changes.
+</ParamField>
+
+## What It Does
+
+The command synchronizes multiple configuration files:
+
+### 1. PHPUnit Configuration
+Updates `phpunit.xml` to include module tests:
+- Adds a "Modules" test suite
+- Configures directory pattern: `./app-modules/*/tests`
+- Sets test suffix to `Test.php`
+
+### 2. PhpStorm Laravel Plugin Config
+Updates `.idea/laravel-plugin.xml` to:
+- Register module view directories
+- Configure module namespace roots
+- Enable Laravel features for modules
+
+### 3. PhpStorm PHP Config
+Updates `.idea/php.xml` to:
+- Add module source directories to PHP include paths
+- Configure PSR-4 namespace mappings
+- Enable autocompletion for module classes
+
+### 4. PhpStorm Workspace Config
+Updates `.idea/workspace.xml` to:
+- Register module library roots
+- Configure resource directories
+- Set up module-specific settings
+
+### 5. PhpStorm Project IML
+Updates `.idea/*.iml` to:
+- Mark module `src/` directories as source folders
+- Mark module `tests/` directories as test sources
+- Configure resource roots for views and assets
+
+## Example Output
+
+```bash
+php artisan modules:sync
+```
+
+**Terminal Output:**
+```
+Added "Modules" PHPUnit test suite.
+Updated PhpStorm/Laravel Plugin config file...
+Updated PhpStorm PHP config file...
+Updated PhpStorm workspace library roots...
+Updated PhpStorm project source folders in 'myapp.iml'
+```
+
+### Skip PhpStorm Updates
+
+```bash
+php artisan modules:sync --no-phpstorm
+```
+
+**Terminal Output:**
+```
+Added "Modules" PHPUnit test suite.
+```
+
+### Already Synced
+
+```bash
+php artisan modules:sync
+```
+
+**Terminal Output:**
+```
+Modules test suite already exists in phpunit.xml
+Did not find/update PhpStorm/Laravel Plugin config.
+Did not find/update PhpStorm PHP config.
+Did not find/update PhpStorm workspace config.
+Did not find/update PhpStorm project source folders in 'myapp.iml'
+```
+
+<Note>
+  The command only modifies files that exist and need updates. Missing configuration files are safely skipped with informational messages.
+</Note>
+
+## When to Use
+
+Run `modules:sync` in these scenarios:
+
+### After Creating First Module
+
+Initial setup for module testing and IDE support:
+
+```bash
+php artisan make:module Blog
+composer update modules/blog
+php artisan modules:sync
+```
+
+### After Adding Multiple Modules
+
+Ensure all modules are properly configured:
+
+```bash
+php artisan make:module Shop
+php artisan make:module Analytics
+composer update
+php artisan modules:sync
+```
+
+### After Cloning Repository
+
+Set up IDE configuration for new team members:
+
+```bash
+git clone repository-url
+composer install
+php artisan modules:sync
+```
+
+### IDE Not Recognizing Modules
+
+Fix autocompletion and navigation issues:
+
+```bash
+php artisan modules:sync
+# Then restart PhpStorm
+```
+
+## PHPUnit Configuration
+
+### Before Sync
+
+```xml
+<!-- phpunit.xml -->
+<phpunit>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory suffix="Test.php">./tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory suffix="Test.php">./tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
+```
+
+### After Sync
+
+```xml
+<!-- phpunit.xml -->
+<phpunit>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory suffix="Test.php">./tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory suffix="Test.php">./tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Modules">
+            <directory suffix="Test.php">./app-modules/*/tests</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>
+```
+
+Now you can run module tests:
+
+```bash
+php artisan test --testsuite=Modules
+```
+
+## PhpStorm Integration
+
+### Benefits of PhpStorm Sync
+
+After running `modules:sync`, PhpStorm provides:
+
+**Code Navigation**
+- Click through to module classes
+- Find usages across modules
+- Go to definition for module code
+
+**Autocompletion**
+- Module class hints
+- Method suggestions
+- Namespace imports
+
+**Refactoring**
+- Safe rename across modules
+- Extract method in module code
+- Move classes between modules
+
+**Testing**
+- Run module tests from IDE
+- Debug module test cases
+- Coverage reports for modules
+
+### Manual Sync Alternative
+
+If you prefer manual PhpStorm configuration:
+
+```bash
+php artisan modules:sync --no-phpstorm
+```
+
+Then manually configure in PhpStorm:
+1. **Settings** → **Directories**
+2. Mark `app-modules/*/src` as **Sources**
+3. Mark `app-modules/*/tests` as **Tests**
+
+## Verbose Output
+
+Get detailed information about sync operations:
+
+```bash
+php artisan modules:sync -v
+```
+
+Shows error details when configuration updates fail:
+
+```
+Did not find/update PhpStorm/Laravel Plugin config.
+  Warning: .idea/laravel-plugin.xml does not exist
+  
+Did not find/update PhpStorm PHP config.
+  Warning: Cannot parse .idea/php.xml - invalid XML structure
+```
+
+## Configuration Files Modified
+
+The command may modify these files in your project:
+
+```
+project-root/
+├── phpunit.xml                          # ✓ PHPUnit test suites
+└── .idea/
+    ├── laravel-plugin.xml              # ✓ Laravel plugin settings
+    ├── php.xml                          # ✓ PHP include paths
+    ├── workspace.xml                    # ✓ Workspace library roots
+    └── [project-name].iml              # ✓ Source folder mappings
+```
+
+<Warning>
+  The sync command modifies configuration files. Commit these changes to version control so team members get consistent IDE behavior.
+</Warning>
+
+## Version Control
+
+### Should You Commit IDE Files?
+
+**Recommended approach:**
+
+```gitignore
+# .gitignore
+.idea/*
+!.idea/laravel-plugin.xml
+!.idea/php.xml
+!.idea/*.iml
+```
+
+**Rationale:**
+- Team benefits from shared module configuration
+- Consistent IDE behavior across developers
+- New team members get working setup automatically
+
+**Alternative (exclude all):**
+
+```gitignore
+# .gitignore
+.idea/
+```
+
+Each developer runs `modules:sync` after setup.
+
+## Troubleshooting
+
+### PHPUnit not finding module tests?
+
+**Problem:** `php artisan test` doesn't discover module tests.
+
+**Solution:**
+```bash
+php artisan modules:sync
+php artisan test --testsuite=Modules
+```
+
+### PhpStorm can't find module classes?
+
+**Problem:** Autocompletion and navigation not working for modules.
+
+**Solution:**
+```bash
+php artisan modules:sync
+composer dump-autoload
+# In PhpStorm: File → Invalidate Caches → Invalidate and Restart
+```
+
+### Sync says "Cannot find testsuites node"?
+
+**Problem:** Your `phpunit.xml` has non-standard structure.
+
+**Solution:** Ensure your `phpunit.xml` has a `<testsuites>` section:
+
+```xml
+<phpunit>
+    <testsuites>
+        <!-- Test suites go here -->
+    </testsuites>
+</phpunit>
+```
+
+### PhpStorm config not updating?
+
+**Problem:** Sync reports success but IDE still has issues.
+
+**Solution:**
+```bash
+php artisan modules:sync -v  # Check for warnings
+# Close PhpStorm
+rm -rf .idea/
+php artisan modules:sync
+# Reopen PhpStorm
+```
+
+## Team Workflow
+
+Recommended workflow for teams:
+
+### Initial Setup
+
+```bash
+# 1. Clone repository
+git clone repository-url
+cd project
+
+# 2. Install dependencies
+composer install
+
+# 3. Sync configurations
+php artisan modules:sync
+
+# 4. Verify setup
+php artisan modules:list
+php artisan test
+```
+
+### After Adding Module
+
+```bash
+# Developer creates module
+php artisan make:module NewFeature
+composer update modules/new-feature
+php artisan modules:sync
+git add .
+git commit -m "Add NewFeature module"
+git push
+
+# Other team members pull
+git pull
+composer install
+php artisan modules:sync  # Update their IDE config
+```
+
+## Best Practices
+
+1. **Run after module changes** - Always sync after adding/removing modules
+2. **Commit IDE configs** - Share configuration with team via version control
+3. **Include in setup docs** - Add to onboarding instructions for new developers
+4. **Automate if possible** - Add to post-install Composer scripts:
+
+```json
+{
+    "scripts": {
+        "post-install-cmd": [
+            "@php artisan modules:sync --no-phpstorm"
+        ]
+    }
+}
+```
+
+5. **Run before testing** - Ensure test suite is up-to-date
+
+## Related Commands
+
+- [make:module](/cli/make-module) - Create module (then sync configuration)
+- [modules:list](/cli/modules-list) - View modules that will be synced
+- [modules:cache](/cli/modules-cache) - Cache modules after syncing
+- [modules:clear](/cli/modules-clear) - Clear cache before syncing

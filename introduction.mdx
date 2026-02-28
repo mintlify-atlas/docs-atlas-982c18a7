@@ -1,0 +1,125 @@
+---
+title: Introduction
+description: A modular architecture system for Laravel applications that uses Composer path repositories and Laravel's package discovery system
+---
+
+## What is Laravel Modular?
+
+Laravel Modular (`internachi/modular`) is a module system that helps you organize large Laravel applications by breaking them into self-contained modules. Unlike other module systems, it leverages Laravel's existing conventions and tools rather than introducing new patterns.
+
+This project is as much a set of conventions as it is a package. The fundamental idea is that you can create "modules" in a separate `app-modules/` directory, which allows you to better organize large projects while using the existing Laravel package system.
+
+## How It Works
+
+Laravel Modular uses three core Laravel features:
+
+- **Composer path repositories** for autoloading module code
+- **Laravel package discovery** for automatic module initialization
+- **Minimal tooling** to fill in gaps and enhance the developer experience
+
+<Note>
+Each module is essentially a Laravel package that lives within your application. This means you can extract any module to a standalone package at any time.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Laravel Conventions" icon="laravel" iconType="duotone">
+    Follows existing Laravel patterns for models, controllers, migrations, and more. No new directory structure to learn.
+  </Card>
+  
+  <Card title="Auto-Discovery" icon="wand-magic-sparkles" iconType="duotone">
+    Commands, migrations, policies, Blade components, and event listeners are automatically discovered.
+  </Card>
+  
+  <Card title="Artisan Integration" icon="terminal" iconType="duotone">
+    All Laravel `make:` commands support a `--module` option to scaffold code directly in your modules.
+  </Card>
+  
+  <Card title="Lightweight" icon="feather" iconType="duotone">
+    Minimal overhead with no complex configuration or learning curve. Just install and start building.
+  </Card>
+</CardGroup>
+
+## What Gets Auto-Discovered?
+
+When you create a module, Laravel Modular automatically registers:
+
+- **Commands** with Artisan
+- **Migrations** with the database migrator
+- **Factories** for model testing
+- **Policies** for authorization
+- **Blade components** with component namespaces
+- **Event listeners** for event handling
+- **Views** with view namespaces
+- **Translations** with translation namespaces
+
+## Module Structure
+
+When you create a module, you get a familiar Laravel structure:
+
+```
+app-modules/
+  my-module/
+    composer.json
+    src/
+      Providers/
+        MyModuleServiceProvider.php
+    routes/
+      my-module-routes.php
+    resources/
+      views/
+      lang/
+    database/
+      factories/
+      migrations/
+      seeders/
+    tests/
+```
+
+## Quick Example
+
+Here's how you can access module features after creating a module:
+
+<CodeGroup>
+```php Blade Components
+<!-- Access module Blade components -->
+<x-my-module::alert type="success">
+  Module component loaded!
+</x-my-module::alert>
+```
+
+```php Translations
+// Access module translations
+__('my-module::messages.welcome');
+```
+
+```php Views
+// Render module views
+return view('my-module::dashboard');
+```
+</CodeGroup>
+
+## Get Started
+
+Ready to modularize your Laravel application?
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Laravel Modular via Composer and configure your namespace
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Create your first module and start building features
+  </Card>
+</CardGroup>
+
+## Comparison to Other Solutions
+
+If you're building a CMS that needs to support dynamically enabled/disabled third-party modules, packages like `nwidart/laravel-modules` might be a better fit.
+
+However, if you're interested in modules primarily for code organization and want to stick closely to Laravel conventions, Laravel Modular is the perfect choice.
+
+<Tip>
+**Built by InterNACHI** - Used in production by thousands of projects that need better code organization without sacrificing Laravel's conventions.
+</Tip>

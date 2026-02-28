@@ -1,0 +1,496 @@
+---
+title: Module Views
+description: Work with Blade templates and views in Laravel modules
+---
+
+Laravel Modular automatically registers view namespaces for each module, making it easy to organize and render Blade templates.
+
+## View Namespace
+
+Each module gets its own view namespace based on the module name. Views are stored in the `resources/views/` directory.
+
+### Basic Usage
+
+For a module named `blog`, views are referenced using the `blog::` prefix:
+
+```php
+return view('blog::posts.index');
+```
+
+This loads the view from:
+```
+app-modules/blog/resources/views/posts/index.blade.php
+```
+
+<Note>
+  The namespace prefix (e.g., `blog::`) matches your module's folder name, not necessarily the PHP namespace.
+</Note>
+
+## Creating Views
+
+Create Blade templates in your module's `resources/views/` directory:
+
+<CodeGroup>
+```blade app-modules/blog/resources/views/posts/index.blade.php
+@extends('layouts.app')
+
+@section('content')
+    <div class="container">
+        <h1>Blog Posts</h1>
+        
+        @foreach($posts as $post)
+            <article>
+                <h2>{{ $post->title }}</h2>
+                <p>{{ $post->excerpt }}</p>
+                <a href="{{ route('blog.posts.show', $post) }}">
+                    Read more
+                </a>
+            </article>
+        @endforeach
+    </div>
+@endsection
+```
+
+```blade app-modules/blog/resources/views/posts/show.blade.php
+@extends('layouts.app')
+
+@section('content')
+    <article>
+        <h1>{{ $post->title }}</h1>
+        <div class="meta">
+            Published {{ $post->published_at->diffForHumans() }}
+        </div>
+        <div class="content">
+            {!! $post->content !!}
+        </div>
+    </article>
+@endsection
+```
+</CodeGroup>
+
+## Rendering Views
+
+### From Controllers
+
+```php app-modules/blog/src/Controllers/PostController.php
+<?php
+
+namespace Modules\Blog\Controllers;
+
+use App\Http\Controllers\Controller;
+use Modules\Blog\Models\Post;
+
+class PostController extends Controller
+{
+    public function index()
+    {
+        $posts = Post::latest()->paginate(10);
+        
+        return view('blog::posts.index', compact('posts'));
+    }
+    
+    public function show(Post $post)
+    {
+        return view('blog::posts.show', compact('post'));
+    }
+}
+```
+
+### From Routes
+
+```php
+Route::get('/posts', function () {
+    $posts = Post::all();
+    return view('blog::posts.index', compact('posts'));
+});
+```
+
+### From Other Views
+
+Include module views from other views:
+
+```blade
+@include('blog::partials.sidebar')
+```
+
+## View Organization
+
+Organize views into subdirectories:
+
+```
+app-modules/blog/
+└── resources/
+    └── views/
+        ├── posts/
+        │   ├── index.blade.php
+        │   ├── show.blade.php
+        │   ├── create.blade.php
+        │   └── edit.blade.php
+        ├── components/
+        │   ├── alert.blade.php
+        │   └── card.blade.php
+        ├── layouts/
+        │   └── app.blade.php
+        └── partials/
+            ├── header.blade.php
+            └── footer.blade.php
+```
+
+Reference nested views with dot notation:
+
+```php
+return view('blog::posts.index');
+return view('blog::layouts.app');
+return view('blog::partials.header');
+```
+
+## Blade Components
+
+Laravel Modular automatically registers Blade components with your module's namespace.
+
+### Class-Based Components
+
+Create a component:
+
+```bash
+php artisan make:component Alert --module=blog
+```
+
+This creates:
+
+<CodeGroup>
+```php app-modules/blog/src/View/Components/Alert.php
+<?php
+
+namespace Modules\Blog\View\Components;
+
+use Illuminate\View\Component;
+
+class Alert extends Component
+{
+    public function __construct(
+        public string $type = 'info',
+        public ?string $message = null
+    ) {
+    }
+
+    public function render()
+    {
+        return view('blog::components.alert');
+    }
+}
+```
+
+```blade app-modules/blog/resources/views/components/alert.blade.php
+<div class="alert alert-{{ $type }}" role="alert">
+    @if($message)
+        {{ $message }}
+    @else
+        {{ $slot }}
+    @endif
+</div>
+```
+</CodeGroup>
+
+### Using Components
+
+Use components with the module namespace prefix:
+
+```blade
+<x-blog::alert type="success" message="Post created!" />
+
+<x-blog::alert type="warning">
+    This is a custom message in the slot.
+</x-blog::alert>
+```
+
+<Tip>
+  Component names use the module name as a prefix: `<x-module::component-name>`
+</Tip>
+
+### Anonymous Components
+
+Create anonymous components by placing Blade files directly in `resources/views/components/`:
+
+```blade app-modules/blog/resources/views/components/post-card.blade.php
+@props(['post'])
+
+<div class="post-card">
+    <h3>{{ $post->title }}</h3>
+    <p>{{ $post->excerpt }}</p>
+    <a href="{{ route('blog.posts.show', $post) }}">
+        Read more
+    </a>
+</div>
+```
+
+Use it:
+
+```blade
+<x-blog::post-card :post="$post" />
+```
+
+### Nested Components
+
+Organize components in subdirectories:
+
+```
+resources/views/components/
+├── alert.blade.php
+├── cards/
+│   ├── post.blade.php
+│   └── featured.blade.php
+└── forms/
+    ├── input.blade.php
+    └── textarea.blade.php
+```
+
+Reference with dot notation:
+
+```blade
+<x-blog::cards.post :post="$post" />
+<x-blog::cards.featured :post="$featured" />
+<x-blog::forms.input name="title" />
+```
+
+## Layouts
+
+### Module-Specific Layouts
+
+Create layouts specific to your module:
+
+```blade app-modules/blog/resources/views/layouts/app.blade.php
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@yield('title', 'Blog') - {{ config('app.name') }}</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body>
+    @include('blog::partials.header')
+    
+    <main>
+        @yield('content')
+    </main>
+    
+    @include('blog::partials.footer')
+</body>
+</html>
+```
+
+Extend in your views:
+
+```blade
+@extends('blog::layouts.app')
+
+@section('title', 'All Posts')
+
+@section('content')
+    <h1>Blog Posts</h1>
+    {{-- Content here --}}
+@endsection
+```
+
+### Using Application Layouts
+
+Modules can also extend your application's main layout:
+
+```blade
+@extends('layouts.app')
+
+@section('content')
+    {{-- Module content here --}}
+@endsection
+```
+
+## Partials and Includes
+
+### Creating Partials
+
+```blade app-modules/blog/resources/views/partials/post-excerpt.blade.php
+<article class="post-excerpt">
+    <h2>{{ $post->title }}</h2>
+    <div class="meta">
+        By {{ $post->author->name }} on {{ $post->published_at->format('M d, Y') }}
+    </div>
+    <p>{{ $post->excerpt }}</p>
+    <a href="{{ route('blog.posts.show', $post) }}">Read more</a>
+</article>
+```
+
+### Including Partials
+
+```blade
+@foreach($posts as $post)
+    @include('blog::partials.post-excerpt', ['post' => $post])
+@endforeach
+```
+
+## View Composers
+
+Share data with views using view composers in your service provider:
+
+```php app-modules/blog/src/Providers/BlogServiceProvider.php
+<?php
+
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\View;
+use Modules\Blog\Models\Category;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    public function boot()
+    {
+        // Share data with all blog views
+        View::composer('blog::*', function ($view) {
+            $view->with('categories', Category::all());
+        });
+        
+        // Share data with specific views
+        View::composer('blog::posts.show', function ($view) {
+            $view->with('relatedPosts', $view->getData()['post']->related()->take(3)->get());
+        });
+    }
+}
+```
+
+Now all blog views have access to `$categories`, and the post show view has `$relatedPosts`.
+
+## View Data
+
+### Passing Data
+
+Pass data to views in multiple ways:
+
+<CodeGroup>
+```php Compact
+return view('blog::posts.show', compact('post', 'comments'));
+```
+
+```php Array
+return view('blog::posts.show', [
+    'post' => $post,
+    'comments' => $comments,
+]);
+```
+
+```php With Method
+return view('blog::posts.show')
+    ->with('post', $post)
+    ->with('comments', $comments);
+```
+</CodeGroup>
+
+## Sharing Views Across Modules
+
+Views from one module can include or reference views from another:
+
+```blade
+{{-- In the Shop module, include a blog component --}}
+<x-blog::alert type="info">
+    Check out our blog for more information!
+</x-blog::alert>
+
+{{-- Include a partial from another module --}}
+@include('blog::partials.newsletter-signup')
+```
+
+## Testing Views
+
+Test that views render correctly:
+
+```php app-modules/blog/tests/PostViewTest.php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+use Modules\Blog\Models\Post;
+
+class PostViewTest extends TestCase
+{
+    public function test_post_index_view_renders()
+    {
+        $response = $this->get(route('blog.index'));
+        
+        $response->assertStatus(200);
+        $response->assertViewIs('blog::posts.index');
+        $response->assertViewHas('posts');
+    }
+    
+    public function test_post_show_view_renders()
+    {
+        $post = Post::factory()->create([
+            'title' => 'Test Post'
+        ]);
+        
+        $response = $this->get(route('blog.posts.show', $post));
+        
+        $response->assertStatus(200);
+        $response->assertViewIs('blog::posts.show');
+        $response->assertViewHas('post');
+        $response->assertSee('Test Post');
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Module Namespaces">
+    Always use the module namespace prefix when referencing views:
+    
+    ```php
+    // Good
+    return view('blog::posts.index');
+    
+    // Bad
+    return view('posts.index'); // Won't work
+    ```
+  </Accordion>
+
+  <Accordion title="Organize by Feature">
+    Group related views together:
+    
+    ```
+    views/
+    ├── posts/          # All post-related views
+    ├── categories/     # All category views
+    └── components/     # Shared components
+    ```
+  </Accordion>
+
+  <Accordion title="Extract Reusable Components">
+    Create components for repeated UI elements:
+    
+    ```bash
+    php artisan make:component PostCard --module=blog
+    php artisan make:component CategoryBadge --module=blog
+    ```
+  </Accordion>
+
+  <Accordion title="Use View Composers for Common Data">
+    Don't repeat yourself - use view composers to share data:
+    
+    ```php
+    View::composer('blog::*', function ($view) {
+        $view->with('categories', Category::all());
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Learn about creating Blade components
+  </Card>
+  <Card title="Module Routing" icon="route" href="/guides/module-routing">
+    Define routes for your views
+  </Card>
+</CardGroup>

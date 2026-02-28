@@ -1,0 +1,560 @@
+---
+title: 'make:command'
+description: 'Generate Artisan console command classes within your modules'
+---
+
+## Command
+
+```bash
+php artisan make:command {name} --module={module}
+```
+
+Create a new Artisan command class in your module's `src/Console/Commands` directory.
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the command class
+  
+  **Conventions:**
+  - Use PascalCase
+  - Use descriptive action names
+  
+  **Examples:**
+  - `PublishPost`
+  - `ImportPosts`
+  - `SendWeeklyDigest`
+</ParamField>
+
+## Options
+
+<ParamField path="--module" type="string" required>
+  The name of the module where the command should be created
+  
+  **Example:** `--module=blog`
+</ParamField>
+
+<ParamField path="--command" type="string">
+  The terminal command that should be assigned
+  
+  ```bash
+  php artisan make:command PublishPost --command=post:publish --module=blog
+  ```
+  
+  <Note>
+    When using `--module`, if you don't specify `--command`, the command signature will automatically be prefixed with your module name.
+  </Note>
+</ParamField>
+
+<ParamField path="--test" type="boolean">
+  Generate an accompanying test for the command
+</ParamField>
+
+<ParamField path="--pest" type="boolean">
+  Generate an accompanying Pest test
+</ParamField>
+
+## Examples
+
+### Basic Command
+
+```bash
+php artisan make:command PublishPost --module=blog
+```
+
+Generates a console command:
+
+```php
+namespace Modules\Blog\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class PublishPost extends Command
+{
+    /**
+     * The name and signature of the console command.
+     *
+     * @var string
+     */
+    protected $signature = 'blog:publish-post';
+
+    /**
+     * The console command description.
+     *
+     * @var string
+     */
+    protected $description = 'Command description';
+
+    /**
+     * Execute the console command.
+     */
+    public function handle(): int
+    {
+        return Command::SUCCESS;
+    }
+}
+```
+
+**Location:** `app-modules/blog/src/Console/Commands/PublishPost.php`
+
+<Note>
+  The command signature is automatically set to `blog:publish-post` based on your module name and class name.
+</Note>
+
+### Command with Custom Signature
+
+```bash
+php artisan make:command ImportPosts --command=posts:import --module=blog
+```
+
+Generates a command with a custom signature:
+
+```php
+protected $signature = 'posts:import';
+```
+
+### Command with Arguments
+
+After generating, customize the signature to accept arguments:
+
+```php
+protected $signature = 'blog:publish-post {postId : The ID of the post to publish}';
+
+public function handle(): int
+{
+    $postId = $this->argument('postId');
+    
+    $this->info("Publishing post {$postId}...");
+    
+    // Your logic here
+    
+    return Command::SUCCESS;
+}
+```
+
+### Command with Options
+
+Add options to your command signature:
+
+```php
+protected $signature = 'blog:import-posts 
+    {--force : Force the import even if posts exist}
+    {--limit=100 : Number of posts to import}';
+
+public function handle(): int
+{
+    $force = $this->option('force');
+    $limit = $this->option('limit');
+    
+    if ($force) {
+        $this->warn('Force mode enabled');
+    }
+    
+    $this->info("Importing up to {$limit} posts...");
+    
+    // Your logic here
+    
+    return Command::SUCCESS;
+}
+```
+
+### Interactive Command
+
+Use Laravel's console helpers for user interaction:
+
+```php
+protected $signature = 'blog:create-post';
+protected $description = 'Create a new blog post interactively';
+
+public function handle(): int
+{
+    $title = $this->ask('What is the post title?');
+    $publish = $this->confirm('Do you want to publish it now?', true);
+    $category = $this->choice('Select a category', ['Tech', 'News', 'Tutorial']);
+    
+    $this->info('Creating post...');
+    
+    // Create the post
+    
+    $this->info('Post created successfully!');
+    
+    return Command::SUCCESS;
+}
+```
+
+### Command with Progress Bar
+
+```php
+protected $signature = 'blog:sync-posts';
+protected $description = 'Sync posts from external API';
+
+public function handle(): int
+{
+    $posts = $this->fetchPostsFromApi();
+    
+    $bar = $this->output->createProgressBar(count($posts));
+    $bar->start();
+    
+    foreach ($posts as $post) {
+        $this->syncPost($post);
+        $bar->advance();
+    }
+    
+    $bar->finish();
+    $this->newLine();
+    
+    $this->info('All posts synced successfully!');
+    
+    return Command::SUCCESS;
+}
+```
+
+## Module-Specific Behavior
+
+### Automatic Command Naming
+
+When you use the `--module` option, the command generator automatically prefixes the CLI command with your module name:
+
+```php MakeCommand.php:13-34
+protected function replaceClass($stub, $name)
+{
+    $module = $this->module();
+    
+    $stub = parent::replaceClass($stub, $name);
+    
+    if ($module) {
+        $cli_name = Str::of($name)->classBasename()->kebab();
+        
+        $find = [
+            '{{command}}',
+            '{{ command }}',
+            'dummy:command',
+            'command:name',
+            "app:{$cli_name}",
+        ];
+        
+        $stub = str_replace($find, "{$module->name}:{$cli_name}", $stub);
+    }
+    
+    return $stub;
+}
+```
+
+This ensures commands are namespaced by module:
+
+<CodeGroup>
+
+```bash Without --module
+php artisan make:command PublishPost
+# Signature: app:publish-post
+```
+
+```bash With --module=blog
+php artisan make:command PublishPost --module=blog
+# Signature: blog:publish-post
+```
+
+</CodeGroup>
+
+<Tip>
+  Module-namespaced commands prevent naming conflicts when multiple modules have similar functionality.
+</Tip>
+
+### Custom Command Names
+
+You can override the automatic naming:
+
+```bash
+php artisan make:command PublishPost --command=custom:publish --module=blog
+```
+
+This sets the signature to `custom:publish` instead of `blog:publish-post`.
+
+## Command Registration
+
+### Automatic Registration
+
+Laravel automatically discovers and registers commands in your module. Just ensure your service provider is registered in `composer.json`:
+
+```json composer.json
+{
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Blog\\Providers\\BlogServiceProvider"
+            ]
+        }
+    }
+}
+```
+
+### Manual Registration
+
+Alternatively, register in your service provider:
+
+```php BlogServiceProvider.php
+use Modules\Blog\Console\Commands\PublishPost;
+use Modules\Blog\Console\Commands\ImportPosts;
+
+public function boot(): void
+{
+    if ($this->app->runningInConsole()) {
+        $this->commands([
+            PublishPost::class,
+            ImportPosts::class,
+        ]);
+    }
+}
+```
+
+## Running Your Command
+
+After creating and registering your command:
+
+```bash
+# Run the command
+php artisan blog:publish-post
+
+# View command help
+php artisan help blog:publish-post
+
+# List all commands (including module commands)
+php artisan list
+```
+
+## Common Command Patterns
+
+### Command with Dependency Injection
+
+Inject services through the constructor:
+
+```php
+use Modules\Blog\Services\PostPublisher;
+
+class PublishPost extends Command
+{
+    protected $signature = 'blog:publish-post {postId}';
+    
+    public function __construct(
+        private PostPublisher $publisher
+    ) {
+        parent::__construct();
+    }
+    
+    public function handle(): int
+    {
+        $postId = $this->argument('postId');
+        
+        $this->publisher->publish($postId);
+        
+        return Command::SUCCESS;
+    }
+}
+```
+
+### Command with Database Operations
+
+```php
+use Modules\Blog\Models\Post;
+
+class PublishScheduledPosts extends Command
+{
+    protected $signature = 'blog:publish-scheduled';
+    protected $description = 'Publish all scheduled posts';
+    
+    public function handle(): int
+    {
+        $posts = Post::where('status', 'scheduled')
+            ->where('publish_at', '<=', now())
+            ->get();
+        
+        if ($posts->isEmpty()) {
+            $this->info('No posts to publish.');
+            return Command::SUCCESS;
+        }
+        
+        foreach ($posts as $post) {
+            $post->update(['status' => 'published']);
+            $this->line("Published: {$post->title}");
+        }
+        
+        $this->info("Published {$posts->count()} posts.");
+        
+        return Command::SUCCESS;
+    }
+}
+```
+
+### Command with Error Handling
+
+```php
+public function handle(): int
+{
+    try {
+        $this->info('Starting import...');
+        
+        $this->importPosts();
+        
+        $this->info('Import completed successfully!');
+        return Command::SUCCESS;
+        
+    } catch (\Exception $e) {
+        $this->error('Import failed: ' . $e->getMessage());
+        return Command::FAILURE;
+    }
+}
+```
+
+### Scheduled Command
+
+Commands can be scheduled in `app/Console/Kernel.php`:
+
+```php Kernel.php
+protected function schedule(Schedule $schedule): void
+{
+    $schedule->command('blog:publish-scheduled')
+        ->hourly()
+        ->withoutOverlapping();
+    
+    $schedule->command('blog:send-digest')
+        ->weeklyOn(1, '8:00')
+        ->emailOutputOnFailure('admin@example.com');
+}
+```
+
+## Output Formatting
+
+### Tables
+
+```php
+$this->table(
+    ['ID', 'Title', 'Status'],
+    $posts->map(fn($post) => [
+        $post->id,
+        $post->title,
+        $post->status,
+    ])
+);
+```
+
+### Styled Output
+
+```php
+$this->info('Informational message');
+$this->comment('Comment message');
+$this->question('Question message');
+$this->error('Error message');
+$this->warn('Warning message');
+$this->line('Plain message');
+$this->newLine();
+```
+
+### Alert Boxes
+
+```php
+$this->alert('Important Notice');
+```
+
+## Testing Commands
+
+Test your commands using Laravel's testing helpers:
+
+```php
+namespace Modules\Blog\Tests\Console;
+
+use Modules\Blog\Models\Post;
+use Tests\TestCase;
+
+class PublishPostTest extends TestCase
+{
+    public function test_it_publishes_a_post(): void
+    {
+        $post = Post::factory()->create(['status' => 'draft']);
+        
+        $this->artisan('blog:publish-post', ['postId' => $post->id])
+            ->expectsOutput('Publishing post ' . $post->id)
+            ->assertSuccessful();
+        
+        $this->assertEquals('published', $post->fresh()->status);
+    }
+    
+    public function test_it_handles_invalid_post_id(): void
+    {
+        $this->artisan('blog:publish-post', ['postId' => 999])
+            ->expectsOutput('Post not found')
+            ->assertFailed();
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Use descriptive signatures" icon="signature">
+  Make command signatures clear and intuitive:
+  
+  - ✅ `blog:publish-post`
+  - ✅ `blog:import-posts`
+  - ❌ `blog:do`
+  - ❌ `process`
+</Accordion>
+
+<Accordion title="Add helpful descriptions" icon="circle-info">
+  Write clear descriptions for the `--help` output:
+  
+  ```php
+  protected $description = 'Publish a draft post by ID';
+  ```
+</Accordion>
+
+<Accordion title="Document arguments and options" icon="book">
+  Use descriptive text in your signature:
+  
+  ```php
+  protected $signature = 'blog:publish-post 
+      {postId : The ID of the post to publish}
+      {--queue : Queue the publishing job}';
+  ```
+</Accordion>
+
+<Accordion title="Return appropriate exit codes" icon="circle-check">
+  Use Laravel's command constants:
+  
+  ```php
+  return Command::SUCCESS;  // 0
+  return Command::FAILURE;  // 1
+  return Command::INVALID;  // 2
+  ```
+</Accordion>
+
+<Accordion title="Provide feedback" icon="comment">
+  Always inform users about what's happening:
+  
+  ```php
+  $this->info('Starting process...');
+  // ... do work ...
+  $this->info('Process completed!');
+  ```
+</Accordion>
+
+<Accordion title="Handle errors gracefully" icon="shield-check">
+  Catch exceptions and provide meaningful error messages:
+  
+  ```php
+  try {
+      $this->processData();
+  } catch (\Exception $e) {
+      $this->error('Failed: ' . $e->getMessage());
+      return Command::FAILURE;
+  }
+  ```
+</Accordion>
+
+</AccordionGroup>
+
+## See Also
+
+- [Laravel Artisan Console Documentation](https://laravel.com/docs/artisan)
+- [Task Scheduling Documentation](https://laravel.com/docs/scheduling)
+- [Console Tests Documentation](https://laravel.com/docs/console-tests)

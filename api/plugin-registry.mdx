@@ -1,0 +1,294 @@
+---
+title: 'PluginRegistry'
+description: 'Registry for managing and resolving Laravel Modular plugins'
+---
+
+The `PluginRegistry` class manages plugin registration and resolution. Plugins extend Laravel Modular's functionality and are resolved as singletons from the service container.
+
+## Class Reference
+
+```php
+InterNACHI\Modular\PluginRegistry
+```
+
+## Constructor
+
+```php
+public function __construct(
+    protected Container $container,
+)
+```
+
+<ParamField path="container" type="Container" required>
+  The Laravel service container instance
+</ParamField>
+
+## Static Methods
+
+### register()
+
+Statically register one or more plugins with the registry.
+
+```php
+public static function register(string ...$class): void
+```
+
+<ParamField path="class" type="class-string<Plugin>..." required>
+  One or more fully qualified plugin class names to register
+</ParamField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+use App\Plugins\ModuleAnalyzer;
+
+// Register a single plugin
+PluginRegistry::register(CustomGenerator::class);
+
+// Register multiple plugins
+PluginRegistry::register(
+    CustomGenerator::class,
+    ModuleAnalyzer::class
+);
+```
+
+<Note>
+  This is a convenience method that resolves the registry from the container and calls the `add()` method.
+</Note>
+
+## Instance Methods
+
+### add()
+
+Add one or more plugins to the registry.
+
+```php
+public function add(string ...$class): static
+```
+
+<ParamField path="class" type="class-string<Plugin>..." required>
+  One or more fully qualified plugin class names to add
+</ParamField>
+
+<ResponseField name="return" type="static">
+  Returns the registry instance for method chaining
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+use App\Plugins\ModuleAnalyzer;
+
+$registry = app(PluginRegistry::class);
+
+$registry
+    ->add(CustomGenerator::class)
+    ->add(ModuleAnalyzer::class);
+
+// Or add multiple at once
+$registry->add(
+    CustomGenerator::class,
+    ModuleAnalyzer::class
+);
+```
+
+<Note>
+  Plugins are stored using their class name as a key. Adding the same plugin multiple times has no effect.
+</Note>
+
+### get()
+
+Resolve and retrieve a plugin instance from the container.
+
+```php
+public function get(string $plugin, array $parameters = []): Plugin
+```
+
+<ParamField path="plugin" type="class-string<Plugin>" required>
+  The fully qualified class name of the plugin to retrieve
+</ParamField>
+
+<ParamField path="parameters" type="array">
+  Optional constructor parameters to pass when resolving the plugin
+</ParamField>
+
+<ResponseField name="return" type="Plugin">
+  The resolved plugin instance
+</ResponseField>
+
+<ResponseField name="throws" type="InvalidArgumentException">
+  Thrown when attempting to get a plugin that hasn't been registered
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+
+$registry = app(PluginRegistry::class);
+
+// Get a plugin
+$generator = $registry->get(CustomGenerator::class);
+
+// Get a plugin with constructor parameters
+$generator = $registry->get(CustomGenerator::class, [
+    'option' => 'value',
+]);
+```
+
+<Note>
+  Plugins are resolved as singletons. If you pass new parameters to an already-resolved plugin, the instance is recreated with the new parameters and stored in the container.
+</Note>
+
+### all()
+
+Get all registered plugin class names.
+
+```php
+public function all(): array
+```
+
+<ResponseField name="return" type="class-string<Plugin>[]">
+  An array of registered plugin class names
+</ResponseField>
+
+**Example:**
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+
+$registry = app(PluginRegistry::class);
+
+$plugins = $registry->all();
+
+foreach ($plugins as $pluginClass) {
+    echo "Registered plugin: {$pluginClass}\n";
+}
+```
+
+## Usage Examples
+
+### Registering Plugins in a Service Provider
+
+```php
+use Illuminate\Support\ServiceProvider;
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+use App\Plugins\ModuleAnalyzer;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        PluginRegistry::register(
+            CustomGenerator::class,
+            ModuleAnalyzer::class
+        );
+    }
+}
+```
+
+### Creating a Custom Plugin
+
+```php
+use InterNACHI\Modular\Plugins\Plugin;
+use Illuminate\Console\Command;
+
+class CustomGenerator extends Plugin
+{
+    public function boot(): void
+    {
+        // Plugin initialization logic
+    }
+    
+    public function commands(): array
+    {
+        return [
+            // Return custom commands
+        ];
+    }
+}
+```
+
+### Resolving and Using Plugins
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\ModuleAnalyzer;
+
+$registry = app(PluginRegistry::class);
+
+// Resolve the plugin
+$analyzer = $registry->get(ModuleAnalyzer::class);
+
+// Use the plugin
+$results = $analyzer->analyzeModule('blog');
+```
+
+### Checking Registered Plugins
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+
+$registry = app(PluginRegistry::class);
+
+// Check if a plugin is registered
+$plugins = $registry->all();
+
+if (in_array(CustomGenerator::class, $plugins)) {
+    $generator = $registry->get(CustomGenerator::class);
+    // Use the plugin
+}
+```
+
+### Error Handling
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\CustomGenerator;
+use InvalidArgumentException;
+
+$registry = app(PluginRegistry::class);
+
+try {
+    $plugin = $registry->get(CustomGenerator::class);
+} catch (InvalidArgumentException $e) {
+    // Plugin not registered
+    logger()->error("Plugin not found: {$e->getMessage()}");
+    
+    // Register it first
+    $registry->add(CustomGenerator::class);
+    $plugin = $registry->get(CustomGenerator::class);
+}
+```
+
+### Using Constructor Parameters
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\ConfigurablePlugin;
+
+$registry = app(PluginRegistry::class);
+
+// First resolution with parameters
+$plugin = $registry->get(ConfigurablePlugin::class, [
+    'mode' => 'development',
+]);
+
+// Subsequent resolution with different parameters
+// This will recreate the plugin instance
+$plugin = $registry->get(ConfigurablePlugin::class, [
+    'mode' => 'production',
+]);
+```
+
+## See Also
+
+- [Plugin Base Class](https://github.com/InterNACHI/modular) - Base class for creating plugins
+- [ModuleRegistry](/api/module-registry) - Registry for managing modules

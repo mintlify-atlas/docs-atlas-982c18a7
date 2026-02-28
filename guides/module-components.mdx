@@ -1,0 +1,407 @@
+---
+title: Module Components
+description: Create models, controllers, and other components within modules
+---
+
+Laravel Modular extends all of Laravel's `make:*` commands to support modules. You can create any component within a module using the `--module` flag.
+
+## Creating Components
+
+All standard Laravel generator commands work with modules:
+
+<CodeGroup>
+```bash Controllers
+php artisan make:controller PostController --module=blog
+```
+
+```bash Models
+php artisan make:model Post --module=blog
+```
+
+```bash Middleware
+php artisan make:middleware CheckBlogAccess --module=blog
+```
+
+```bash Requests
+php artisan make:request StorePostRequest --module=blog
+```
+</CodeGroup>
+
+## Available Generators
+
+Laravel Modular supports all Laravel make commands:
+
+<AccordionGroup>
+  <Accordion title="Core Components">
+    - `make:controller` - HTTP controllers
+    - `make:model` - Eloquent models
+    - `make:middleware` - HTTP middleware
+    - `make:request` - Form requests
+    - `make:resource` - API resources
+  </Accordion>
+
+  <Accordion title="Database">
+    - `make:migration` - Database migrations
+    - `make:factory` - Model factories
+    - `make:seeder` - Database seeders
+  </Accordion>
+
+  <Accordion title="Events & Jobs">
+    - `make:event` - Event classes
+    - `make:listener` - Event listeners
+    - `make:job` - Queued jobs
+    - `make:observer` - Model observers
+  </Accordion>
+
+  <Accordion title="Views & Components">
+    - `make:component` - Blade components
+  </Accordion>
+
+  <Accordion title="Other">
+    - `make:command` - Artisan commands
+    - `make:notification` - Notifications
+    - `make:mail` - Mailable classes
+    - `make:policy` - Authorization policies
+    - `make:rule` - Validation rules
+    - `make:exception` - Exception classes
+    - `make:cast` - Custom casts
+    - `make:channel` - Broadcast channels
+    - `make:test` - Tests
+  </Accordion>
+</AccordionGroup>
+
+## Models
+
+Models are created in the `src/Models` directory:
+
+```bash
+php artisan make:model Post --module=blog
+```
+
+This generates:
+
+```php app-modules/blog/src/Models/Post.php
+<?php
+
+namespace Modules\Blog\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Post extends Model
+{
+    protected $table = 'posts';
+}
+```
+
+<Tip>
+  Combine with other flags like `--migration`, `--factory`, `--seed` to generate related files:
+  
+  ```bash
+  php artisan make:model Post --module=blog -mfs
+  ```
+</Tip>
+
+## Controllers
+
+Controllers are created in the `src/Controllers` directory:
+
+```bash
+php artisan make:controller PostController --module=blog
+```
+
+Generated controller:
+
+```php app-modules/blog/src/Controllers/PostController.php
+<?php
+
+namespace Modules\Blog\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class PostController extends Controller
+{
+    //
+}
+```
+
+### Resource Controllers
+
+Create a resource controller with all CRUD methods:
+
+```bash
+php artisan make:controller PostController --module=blog --resource
+```
+
+### API Controllers
+
+Create an API resource controller:
+
+```bash
+php artisan make:controller PostController --module=blog --api
+```
+
+## Blade Components
+
+Blade components are automatically registered and namespaced by module name.
+
+### Creating a Component
+
+```bash
+php artisan make:component Alert --module=blog
+```
+
+This creates two files:
+
+<CodeGroup>
+```php app-modules/blog/src/View/Components/Alert.php
+<?php
+
+namespace Modules\Blog\View\Components;
+
+use Illuminate\View\Component;
+
+class Alert extends Component
+{
+    public function __construct(
+        public string $type = 'info'
+    ) {
+    }
+
+    public function render()
+    {
+        return view('blog::components.alert');
+    }
+}
+```
+
+```blade app-modules/blog/resources/views/components/alert.blade.php
+<div class="alert alert-{{ $type }}">
+    {{ $slot }}
+</div>
+```
+</CodeGroup>
+
+### Using Components
+
+Components are namespaced by module name:
+
+```blade
+<x-blog::alert type="success">
+    Post created successfully!
+</x-blog::alert>
+```
+
+<Note>
+  The `blog::` prefix matches your module name. Components in a `blog` module use `<x-blog::component-name>`.
+</Note>
+
+### Nested Components
+
+Create components in subdirectories:
+
+```bash
+php artisan make:component Cards/Featured --module=blog
+```
+
+Use with dot notation:
+
+```blade
+<x-blog::cards.featured />
+```
+
+## Artisan Commands
+
+Create custom Artisan commands within modules:
+
+```bash
+php artisan make:command PublishPost --module=blog
+```
+
+Generated command:
+
+```php app-modules/blog/src/Console/Commands/PublishPost.php
+<?php
+
+namespace Modules\Blog\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class PublishPost extends Command
+{
+    protected $signature = 'blog:publish {post}';
+    protected $description = 'Publish a blog post';
+
+    public function handle()
+    {
+        //
+    }
+}
+```
+
+<Tip>
+  Commands are automatically discovered and registered. No need to manually register them!
+</Tip>
+
+## Events and Listeners
+
+Create events and their listeners:
+
+<Steps>
+  <Step title="Create an event">
+    ```bash
+    php artisan make:event PostPublished --module=blog
+    ```
+  </Step>
+
+  <Step title="Create a listener">
+    ```bash
+    php artisan make:listener SendPostNotification --module=blog --event=PostPublished
+    ```
+  </Step>
+
+  <Step title="Auto-discovery">
+    If you have event discovery enabled, listeners are automatically registered. Otherwise, register them in your service provider.
+  </Step>
+</Steps>
+
+## Policies
+
+Create authorization policies for your models:
+
+```bash
+php artisan make:policy PostPolicy --module=blog --model=Post
+```
+
+Generated policy:
+
+```php app-modules/blog/src/Policies/PostPolicy.php
+<?php
+
+namespace Modules\Blog\Policies;
+
+use Modules\Blog\Models\Post;
+use App\Models\User;
+
+class PostPolicy
+{
+    public function view(User $user, Post $post)
+    {
+        //
+    }
+
+    public function update(User $user, Post $post)
+    {
+        //
+    }
+}
+```
+
+<Note>
+  Policies are automatically discovered and registered with the Gate.
+</Note>
+
+## Form Requests
+
+Create form request validation classes:
+
+```bash
+php artisan make:request StorePostRequest --module=blog
+```
+
+Example request:
+
+```php app-modules/blog/src/Requests/StorePostRequest.php
+<?php
+
+namespace Modules\Blog\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StorePostRequest extends FormRequest
+{
+    public function authorize()
+    {
+        return true;
+    }
+
+    public function rules()
+    {
+        return [
+            'title' => 'required|max:255',
+            'content' => 'required',
+            'published_at' => 'nullable|date',
+        ];
+    }
+}
+```
+
+## Tests
+
+Create tests within your module:
+
+<CodeGroup>
+```bash Feature Tests
+php artisan make:test PostControllerTest --module=blog
+```
+
+```bash Unit Tests
+php artisan make:test PostTest --module=blog --unit
+```
+</CodeGroup>
+
+Tests extend your application's base TestCase:
+
+```php app-modules/blog/tests/PostControllerTest.php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+
+class PostControllerTest extends TestCase
+{
+    public function test_can_view_posts()
+    {
+        $response = $this->get('/posts');
+        $response->assertStatus(200);
+    }
+}
+```
+
+<Tip>
+  The base test class is configurable in `config/app-modules.php` via the `tests_base` option.
+</Tip>
+
+## Component Namespace Resolution
+
+All components automatically resolve to the correct module namespace:
+
+```php
+// In a Blog module:
+Modules\Blog\Models\Post
+Modules\Blog\Controllers\PostController
+Modules\Blog\View\Components\Alert
+Modules\Blog\Policies\PostPolicy
+```
+
+<Warning>
+  Make sure to run `composer dump-autoload` if classes are not being found after creation.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Routing" icon="route" href="/guides/module-routing">
+    Learn how to define routes in your modules
+  </Card>
+  <Card title="Module Views" icon="eye" href="/guides/module-views">
+    Work with Blade templates and views
+  </Card>
+  <Card title="Module Factories" icon="industry" href="/guides/module-factories">
+    Create model factories for testing
+  </Card>
+  <Card title="Customizing Stubs" icon="pencil" href="/guides/customizing-stubs">
+    Customize generator stub templates
+  </Card>
+</CardGroup>

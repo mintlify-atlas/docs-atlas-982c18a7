@@ -1,80 +1,380 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Create your first Laravel module and start building modular features in minutes
 ---
 
-## Get started in three steps
-
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide walks you through creating your first module, understanding its structure, and building a simple feature using Laravel Modular.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Before starting, make sure you've [installed Laravel Modular](/installation) and optionally configured your namespace.
 </Note>
+
+## Create Your First Module
+
+Let's create a "blog" module to demonstrate the workflow:
+
+<Steps>
+  <Step title="Generate the module">
+    Run the `make:module` command with your desired module name:
+    
+    ```bash
+    php artisan make:module blog
+    ```
+    
+    You'll see output showing the files being created:
+    
+    ```
+    Creating initial module files
+    
+     - Wrote to composer.json
+     - Wrote to src/Providers/BlogServiceProvider.php
+     - Wrote to routes/blog-routes.php
+     - Wrote to resources/views/.gitkeep
+     - Wrote to database/factories/.gitkeep
+     - Wrote to database/migrations/.gitkeep
+     - Wrote to database/seeders/.gitkeep
+     - Wrote to tests/.gitkeep
+    
+    Updating application composer.json file
+    
+     - Adding path repository for app-modules/*
+     - Adding require statement for modules/blog:*
+     - Wrote to /path/to/composer.json
+    
+    Please run composer update modules/blog
+    ```
+    
+    <Warning>
+    If you're creating your first module and haven't customized the namespace, you'll be prompted to consider publishing the config first. You can proceed with the default or cancel to customize.
+    </Warning>
+  </Step>
+  
+  <Step title="Update Composer dependencies">
+    Laravel Modular automatically adds your module to your application's `composer.json`. Now install it:
+    
+    ```bash
+    composer update modules/blog
+    ```
+    
+    This registers the module's autoloader and makes it available to your application.
+  </Step>
+  
+  <Step title="Verify the module was created">
+    List all modules to confirm:
+    
+    ```bash
+    php artisan modules:list
+    ```
+    
+    You should see your blog module listed:
+    
+    ```
+    +--------+-------------------+
+    | Module | Path              |
+    +--------+-------------------+
+    | blog   | app-modules/blog  |
+    +--------+-------------------+
+    ```
+  </Step>
+</Steps>
+
+## Understanding Module Structure
+
+Let's explore what was created:
+
+```
+app-modules/blog/
+├── composer.json                           # Module's Composer configuration
+├── src/
+│   └── Providers/
+│       └── BlogServiceProvider.php        # Service provider for the module
+├── routes/
+│   └── blog-routes.php                    # Module-specific routes
+├── resources/
+│   └── views/                             # Blade views (namespaced as 'blog::')
+├── database/
+│   ├── factories/                         # Model factories
+│   ├── migrations/                        # Database migrations
+│   └── seeders/                           # Database seeders
+└── tests/                                 # Module tests
+```
+
+### Module composer.json
+
+Each module has its own `composer.json` that defines its namespace and dependencies:
+
+```json app-modules/blog/composer.json
+{
+  "name": "modules/blog",
+  "description": "",
+  "type": "library",
+  "version": "1.0",
+  "license": "proprietary",
+  "require": {},
+  "autoload": {
+    "psr-4": {
+      "Modules\\Blog\\": "src/",
+      "Modules\\Blog\\Tests\\": "tests/",
+      "Modules\\Blog\\Database\\Factories\\": "database/factories/",
+      "Modules\\Blog\\Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "minimum-stability": "stable",
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Blog\\Providers\\BlogServiceProvider"
+      ]
+    }
+  }
+}
+```
+
+<Tip>
+The `extra.laravel.providers` section enables Laravel's package discovery, so your module is automatically loaded.
+</Tip>
+
+### Service Provider
+
+Every module includes a service provider for registering services:
+
+```php app-modules/blog/src/Providers/BlogServiceProvider.php
+<?php
+
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Register module services, bindings, or singletons
+    }
+    
+    public function boot(): void
+    {
+        // Bootstrap module resources, views, translations, etc.
+    }
+}
+```
+
+## Building a Feature
+
+Let's build a simple blog post feature using Laravel's `make:` commands with the `--module` option.
+
+<Steps>
+  <Step title="Create a model">
+    Generate a `Post` model in the blog module:
+    
+    ```bash
+    php artisan make:model Post --module=blog -m
+    ```
+    
+    The `-m` flag creates a migration alongside the model.
+    
+    This creates:
+    - `app-modules/blog/src/Models/Post.php`
+    - `app-modules/blog/database/migrations/YYYY_MM_DD_HHMMSS_create_posts_table.php`
+  </Step>
+  
+  <Step title="Create a controller">
+    Generate a resource controller:
+    
+    ```bash
+    php artisan make:controller PostController --module=blog --resource
+    ```
+    
+    This creates `app-modules/blog/src/Http/Controllers/PostController.php` with all resource methods (index, create, store, show, edit, update, destroy).
+  </Step>
+  
+  <Step title="Create a view component">
+    Generate a Blade component for displaying posts:
+    
+    ```bash
+    php artisan make:component PostCard --module=blog
+    ```
+    
+    This creates:
+    - `app-modules/blog/src/View/Components/PostCard.php`
+    - `app-modules/blog/resources/views/components/post-card.blade.php`
+    
+    You can use it in any view:
+    
+    ```blade
+    <x-blog::post-card :post="$post" />
+    ```
+  </Step>
+  
+  <Step title="Add routes">
+    Edit `app-modules/blog/routes/blog-routes.php` to add your routes:
+    
+    ```php app-modules/blog/routes/blog-routes.php
+    <?php
+    
+    use Illuminate\Support\Facades\Route;
+    use Modules\Blog\Http\Controllers\PostController;
+    
+    Route::middleware('web')->prefix('blog')->group(function() {
+        Route::resource('posts', PostController::class);
+    });
+    ```
+  </Step>
+  
+  <Step title="Run migrations">
+    Your module's migrations are automatically discovered. Run them:
+    
+    ```bash
+    php artisan migrate
+    ```
+  </Step>
+</Steps>
+
+## Using Module Features
+
+Now that you've built some components, here's how to use them:
+
+<CodeGroup>
+```php Routes
+// Module routes are automatically loaded
+// Visit /blog/posts in your browser
+```
+
+```blade Blade Components
+<!-- Use module components with the module namespace -->
+<x-blog::post-card :post="$post" />
+```
+
+```php Views
+// Render module views
+return view('blog::posts.index', ['posts' => $posts]);
+```
+
+```php Translations
+// Access module translations
+__('blog::messages.post_created');
+```
+</CodeGroup>
+
+## Available Make Commands
+
+All Laravel `make:` commands support the `--module` option:
+
+<AccordionGroup>
+  <Accordion title="Model & Database">
+    ```bash
+    php artisan make:model Post --module=blog
+    php artisan make:migration create_posts_table --module=blog
+    php artisan make:factory PostFactory --module=blog
+    php artisan make:seeder PostSeeder --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Controllers & HTTP">
+    ```bash
+    php artisan make:controller PostController --module=blog
+    php artisan make:request StorePostRequest --module=blog
+    php artisan make:resource PostResource --module=blog
+    php artisan make:middleware CheckAuthor --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Views & Components">
+    ```bash
+    php artisan make:component Alert --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Business Logic">
+    ```bash
+    php artisan make:job PublishPost --module=blog
+    php artisan make:event PostPublished --module=blog
+    php artisan make:listener SendPostNotification --module=blog
+    php artisan make:mail PostPublished --module=blog
+    php artisan make:notification PostLiked --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Authorization & Validation">
+    ```bash
+    php artisan make:policy PostPolicy --module=blog
+    php artisan make:rule ValidSlug --module=blog
+    php artisan make:cast Slug --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Console & Services">
+    ```bash
+    php artisan make:command PublishScheduledPosts --module=blog
+    php artisan make:provider BlogServiceProvider --module=blog
+    php artisan make:observer PostObserver --module=blog
+    php artisan make:exception PostNotFoundException --module=blog
+    ```
+  </Accordion>
+  
+  <Accordion title="Testing">
+    ```bash
+    php artisan make:test PostTest --module=blog
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Seeding Module Data
+
+You can run seeders specific to your module:
+
+```bash
+# Run the module's DatabaseSeeder
+php artisan db:seed --module=blog
+
+# Run a specific seeder in the module
+php artisan db:seed --class=PostSeeder --module=blog
+```
+
+## Module Management Commands
+
+Laravel Modular provides several utility commands:
+
+<CodeGroup>
+```bash List Modules
+php artisan modules:list
+```
+
+```bash Cache Module Registry
+php artisan modules:cache
+```
+
+```bash Clear Module Cache
+php artisan modules:clear
+```
+
+```bash Sync Project Config
+php artisan modules:sync
+```
+</CodeGroup>
+
+<Tip>
+**Performance Tip:** Run `php artisan modules:cache` in production to cache module discovery and improve performance.
+</Tip>
+
+## Next Steps
+
+Now that you've created your first module, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Namespace Configuration" icon="gear" href="/advanced/namespace-configuration">
+    Learn about advanced configuration options and customization
+  </Card>
+  
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Deep dive into module-namespaced Blade components
+  </Card>
+  
+  <Card title="Module Views" icon="eye" href="/guides/module-views">
+    Working with Blade templates and module namespaces
+  </Card>
+  
+  <Card title="Plugin System" icon="plug" href="/advanced/plugin-system">
+    Understand the extensible plugin architecture
+  </Card>
+</CardGroup>

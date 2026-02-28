@@ -1,0 +1,401 @@
+---
+title: Module Routing
+description: Define and organize routes within Laravel modules
+---
+
+Laravel Modular automatically loads route files from your modules, making it easy to keep your routes organized alongside your module code.
+
+## Route Files
+
+All PHP files in a module's `routes/` directory are automatically loaded. Routes are loaded alphabetically by filename.
+
+### Default Route File
+
+When you create a module, a default route file is generated:
+
+```php app-modules/blog/routes/blog-routes.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+Route::get('/posts', function() {
+    return 'Blog posts';
+});
+```
+
+<Note>
+  Route files are loaded automatically - you don't need to register them manually.
+</Note>
+
+## Organizing Routes
+
+You can organize routes into multiple files within the `routes/` directory:
+
+```
+app-modules/blog/
+└── routes/
+    ├── api.php
+    ├── web.php
+    └── admin.php
+```
+
+### Web Routes
+
+```php app-modules/blog/routes/web.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Controllers\PostController;
+
+Route::middleware('web')->group(function () {
+    Route::get('/posts', [PostController::class, 'index'])
+        ->name('blog.posts.index');
+    
+    Route::get('/posts/{post}', [PostController::class, 'show'])
+        ->name('blog.posts.show');
+});
+```
+
+### API Routes
+
+```php app-modules/blog/routes/api.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Controllers\Api\PostController;
+
+Route::middleware('api')->prefix('api')->group(function () {
+    Route::apiResource('posts', PostController::class);
+});
+```
+
+### Admin Routes
+
+```php app-modules/blog/routes/admin.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Controllers\Admin\PostController;
+
+Route::middleware(['web', 'auth', 'admin'])->prefix('admin')->group(function () {
+    Route::resource('posts', PostController::class);
+});
+```
+
+## Route Naming Conventions
+
+<Tip>
+  Prefix route names with your module name to avoid conflicts:
+  
+  ```php
+  Route::get('/posts', [PostController::class, 'index'])
+      ->name('blog.posts.index');
+  ```
+</Tip>
+
+This prevents naming conflicts when multiple modules have similar routes:
+
+```php
+// Blog module
+Route::name('blog.')->group(function () {
+    Route::get('/posts', ...)->name('posts.index'); // blog.posts.index
+    Route::get('/posts/{post}', ...)->name('posts.show'); // blog.posts.show
+});
+```
+
+## Route Groups
+
+Group routes by module features using route groups:
+
+```php app-modules/blog/routes/web.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Controllers\PostController;
+use Modules\Blog\Controllers\CommentController;
+
+// Public routes
+Route::prefix('blog')->name('blog.')->group(function () {
+    Route::get('/', [PostController::class, 'index'])->name('index');
+    Route::get('/posts/{post}', [PostController::class, 'show'])->name('posts.show');
+});
+
+// Authenticated routes
+Route::middleware('auth')->prefix('blog')->name('blog.')->group(function () {
+    Route::post('/posts/{post}/comments', [CommentController::class, 'store'])
+        ->name('comments.store');
+});
+```
+
+## Route Model Binding
+
+Use route model binding with your module models:
+
+```php
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Models\Post;
+use Modules\Blog\Controllers\PostController;
+
+Route::get('/posts/{post}', [PostController::class, 'show']);
+```
+
+In your controller:
+
+```php app-modules/blog/src/Controllers/PostController.php
+<?php
+
+namespace Modules\Blog\Controllers;
+
+use App\Http\Controllers\Controller;
+use Modules\Blog\Models\Post;
+
+class PostController extends Controller
+{
+    public function show(Post $post)
+    {
+        return view('blog::posts.show', compact('post'));
+    }
+}
+```
+
+### Custom Route Key
+
+Customize the route key in your model:
+
+```php app-modules/blog/src/Models/Post.php
+<?php
+
+namespace Modules\Blog\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Post extends Model
+{
+    public function getRouteKeyName()
+    {
+        return 'slug';
+    }
+}
+```
+
+Now routes will bind using the slug:
+
+```php
+// Matches /posts/my-first-post instead of /posts/1
+Route::get('/posts/{post}', [PostController::class, 'show']);
+```
+
+## Resource Routes
+
+Use resource routing for CRUD operations:
+
+```php
+use Modules\Blog\Controllers\PostController;
+
+Route::resource('posts', PostController::class);
+```
+
+This creates all standard RESTful routes:
+
+<CodeGroup>
+```bash Routes Created
+GET       /posts              index
+GET       /posts/create       create
+POST      /posts              store
+GET       /posts/{post}       show
+GET       /posts/{post}/edit  edit
+PUT       /posts/{post}       update
+DELETE    /posts/{post}       destroy
+```
+
+```php Controller
+class PostController extends Controller
+{
+    public function index() { }
+    public function create() { }
+    public function store(Request $request) { }
+    public function show(Post $post) { }
+    public function edit(Post $post) { }
+    public function update(Request $request, Post $post) { }
+    public function destroy(Post $post) { }
+}
+```
+</CodeGroup>
+
+### API Resources
+
+For APIs, use `apiResource` to exclude `create` and `edit` routes:
+
+```php
+Route::apiResource('posts', PostController::class);
+```
+
+## Middleware
+
+Apply middleware to module routes:
+
+### Route-Level Middleware
+
+```php
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+});
+```
+
+### Module Middleware
+
+Create middleware specific to your module:
+
+```bash
+php artisan make:middleware CheckBlogAccess --module=blog
+```
+
+Register it in your module's service provider:
+
+```php app-modules/blog/src/Providers/BlogServiceProvider.php
+<?php
+
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Routing\Router;
+use Modules\Blog\Middleware\CheckBlogAccess;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    public function boot(Router $router)
+    {
+        $router->aliasMiddleware('blog.access', CheckBlogAccess::class);
+    }
+}
+```
+
+Use it in routes:
+
+```php
+Route::middleware('blog.access')->group(function () {
+    // Protected routes
+});
+```
+
+## Route Caching
+
+<Warning>
+  Module routes work with Laravel's route caching, but make sure to clear and recache after adding new routes.
+</Warning>
+
+Cache routes for production:
+
+```bash
+php artisan route:cache
+```
+
+Clear route cache during development:
+
+```bash
+php artisan route:clear
+```
+
+## Loading Order
+
+Route files are loaded alphabetically by filename across all modules:
+
+```
+1. app-modules/blog/routes/api.php
+2. app-modules/blog/routes/web.php
+3. app-modules/shop/routes/api.php
+4. app-modules/shop/routes/web.php
+```
+
+<Tip>
+  Prefix filenames with numbers to control loading order if needed:
+  - `01-api.php`
+  - `02-web.php`
+  - `03-admin.php`
+</Tip>
+
+## Example: Complete Routing Setup
+
+Here's a complete example of a well-organized module routing setup:
+
+```php app-modules/blog/routes/web.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\Blog\Controllers\PostController;
+use Modules\Blog\Controllers\CommentController;
+use Modules\Blog\Controllers\CategoryController;
+
+// Public blog routes
+Route::prefix('blog')->name('blog.')->group(function () {
+    
+    // Posts
+    Route::get('/', [PostController::class, 'index'])->name('index');
+    Route::get('/posts/{post:slug}', [PostController::class, 'show'])->name('posts.show');
+    
+    // Categories
+    Route::get('/categories/{category:slug}', [CategoryController::class, 'show'])
+        ->name('categories.show');
+});
+
+// Authenticated user routes
+Route::middleware('auth')->prefix('blog')->name('blog.')->group(function () {
+    
+    // Comments
+    Route::post('/posts/{post}/comments', [CommentController::class, 'store'])
+        ->name('comments.store');
+    
+    Route::delete('/comments/{comment}', [CommentController::class, 'destroy'])
+        ->name('comments.destroy');
+});
+
+// Admin routes
+Route::middleware(['auth', 'admin'])
+    ->prefix('admin/blog')
+    ->name('admin.blog.')
+    ->group(function () {
+        Route::resource('posts', PostController::class);
+        Route::resource('categories', CategoryController::class);
+    });
+```
+
+## Testing Routes
+
+Test your module routes:
+
+```php app-modules/blog/tests/PostRoutesTest.php
+<?php
+
+namespace Modules\Blog\Tests;
+
+use Tests\TestCase;
+use Modules\Blog\Models\Post;
+
+class PostRoutesTest extends TestCase
+{
+    public function test_can_view_posts_index()
+    {
+        $response = $this->get(route('blog.index'));
+        $response->assertStatus(200);
+    }
+    
+    public function test_can_view_single_post()
+    {
+        $post = Post::factory()->create();
+        
+        $response = $this->get(route('blog.posts.show', $post));
+        $response->assertStatus(200);
+    }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Views" icon="eye" href="/guides/module-views">
+    Learn how to create and use views in modules
+  </Card>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Create controllers and other components
+  </Card>
+</CardGroup>

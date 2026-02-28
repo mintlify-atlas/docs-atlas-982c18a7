@@ -1,0 +1,261 @@
+---
+title: modules:clear
+description: Remove the module cache file to force fresh module discovery
+---
+
+The `modules:clear` command removes the cached module registry, forcing Laravel to rescan and rediscover all modules on the next request.
+
+## Usage
+
+```bash
+php artisan modules:clear
+```
+
+This command takes no arguments or options.
+
+## What It Does
+
+1. **Deletes cache file** - Removes `bootstrap/cache/modules.php` if it exists
+2. **Resets in-memory data** - Clears the plugin data repository
+3. **Forces rediscovery** - Next request will scan modules directory
+4. **Confirms success** - Displays a success message
+
+## Example Output
+
+```bash
+php artisan modules:clear
+```
+
+**Terminal Output:**
+```
+Module cache cleared!
+```
+
+## When to Use
+
+Run `modules:clear` whenever you make changes to module structure or configuration:
+
+### After Module Changes
+
+**Added a new module:**
+```bash
+php artisan make:module Blog
+php artisan modules:clear  # Clear cache to recognize new module
+```
+
+**Removed a module:**
+```bash
+rm -rf app-modules/old-module
+composer remove modules/old-module
+php artisan modules:clear
+```
+
+**Modified module configuration:**
+```bash
+# After editing app-modules/blog/composer.json
+php artisan modules:clear
+```
+
+### During Development
+
+Clear cache when:
+- Module namespaces aren't resolving correctly
+- New service providers aren't being discovered
+- Module routes or views aren't loading
+- Debugging module-related issues
+
+### Before Caching
+
+The `modules:cache` command automatically calls `modules:clear` first, but you can run it manually:
+
+```bash
+php artisan modules:clear
+php artisan modules:cache
+```
+
+## Development Workflow
+
+Typical development workflow with modules:
+
+```bash
+# 1. Create new module
+php artisan make:module Shop
+
+# 2. Install module dependencies
+composer update modules/shop
+
+# 3. Clear cache (if you had previously cached)
+php artisan modules:clear
+
+# 4. Verify module is recognized
+php artisan modules:list
+```
+
+## What Gets Cleared
+
+### Cache File
+Removes `bootstrap/cache/modules.php` which contains:
+- Module paths and namespaces
+- Autoload configuration
+- Service provider mappings
+- Module metadata
+
+### Runtime Data
+Resets the in-memory plugin data repository, ensuring:
+- No stale module references
+- Fresh module scanning on next request
+- Clean state for testing
+
+## Cache vs Clear
+
+Understanding when to use each command:
+
+| Command | Purpose | Environment | Effect |
+|---------|---------|-------------|--------|
+| `modules:cache` | Store module data | Production | Creates cache file |
+| `modules:clear` | Remove module data | Development | Deletes cache file |
+
+<Note>
+  In development environments, you typically keep the cache clear to allow automatic module discovery. In production, you always want the cache enabled for performance.
+</Note>
+
+## Automatic Cache Clearing
+
+Some commands automatically clear the module cache:
+
+### make:module
+
+Creating a new module automatically clears cache:
+
+```bash
+php artisan make:module Blog
+# Automatically calls modules:clear internally
+```
+
+### modules:cache
+
+Caching modules automatically clears stale cache first:
+
+```bash
+php artisan modules:cache
+# First line of output: "Module cache cleared!"
+# Second line: "Modules cached successfully!"
+```
+
+## Troubleshooting
+
+### Module changes not taking effect?
+
+**Problem:** Modified module configuration isn't being recognized.
+
+**Solution:** Clear the module cache:
+```bash
+php artisan modules:clear
+```
+
+### New module not showing in modules:list?
+
+**Problem:** Just created a module but it doesn't appear.
+
+**Solution:**
+```bash
+php artisan modules:clear
+composer update your-vendor/module-name
+php artisan modules:list
+```
+
+### Service provider not loading?
+
+**Problem:** Module service provider isn't being discovered.
+
+**Solution:**
+```bash
+php artisan modules:clear
+composer dump-autoload
+php artisan clear-compiled
+```
+
+### Cache file won't delete?
+
+**Problem:** Permission denied when clearing cache.
+
+**Solution:** Check file permissions:
+```bash
+ls -la bootstrap/cache/modules.php
+sudo chown www-data:www-data bootstrap/cache/modules.php
+php artisan modules:clear
+```
+
+## Integration with Development Tools
+
+### File Watchers
+
+Automatically clear cache when module files change:
+
+```bash
+# Using fswatch (macOS/Linux)
+fswatch -o app-modules/ | xargs -n1 -I{} php artisan modules:clear
+```
+
+### IDE Scripts
+
+Create a run configuration in PhpStorm:
+- **Name:** Clear Module Cache
+- **Command:** `modules:clear`
+- **Shortcut:** Assign keyboard shortcut for quick access
+
+### Git Hooks
+
+Clear cache after pulling changes:
+
+```bash
+# .git/hooks/post-merge
+#!/bin/bash
+php artisan modules:clear
+```
+
+## Best Practices
+
+### Development Environment
+
+1. **Don't cache modules** during active development
+2. **Clear cache** after composer updates
+3. **Clear cache** when switching branches
+4. **Clear cache** before debugging module issues
+
+### CI/CD Pipelines
+
+Include cache clearing in test setup:
+
+```yaml
+# .github/workflows/tests.yml
+- name: Clear caches
+  run: |
+    php artisan modules:clear
+    php artisan config:clear
+    php artisan cache:clear
+```
+
+### Production Deployments
+
+**During deployment:**
+```bash
+# Clear old cache
+php artisan modules:clear
+
+# Deploy new code
+git pull origin main
+composer install --optimize-autoloader --no-dev
+
+# Create fresh cache
+php artisan modules:cache
+php artisan config:cache
+php artisan route:cache
+```
+
+## Related Commands
+
+- [modules:cache](/cli/modules-cache) - Create module cache for production
+- [modules:list](/cli/modules-list) - Verify modules after clearing cache
+- [make:module](/cli/make-module) - Create new module (auto-clears cache)
+- [modules:sync](/cli/modules-sync) - Update configuration after clearing cache

@@ -1,0 +1,146 @@
+---
+title: modules:list
+description: Display all installed modules with their paths and namespaces
+---
+
+The `modules:list` command displays a table of all registered modules in your Laravel application, including their names, file system paths, and PHP namespaces.
+
+## Usage
+
+```bash
+php artisan modules:list
+```
+
+This command takes no arguments or options.
+
+## What It Does
+
+- Scans the module registry for all installed modules
+- Displays module count summary
+- Shows a formatted table with module details
+- Automatically adjusts column headers based on namespace configuration
+
+## Example Output
+
+### Single module
+
+```bash
+php artisan modules:list
+```
+
+**Terminal Output:**
+```
+You have 1 module installed.
+
++------+-------------------+-----------+
+| Module | Path            | Namespace |
++------+-------------------+-----------+
+| blog | app-modules/blog | Modules\Blog |
++------+-------------------+-----------+
+```
+
+### Multiple modules
+
+```bash
+php artisan modules:list
+```
+
+**Terminal Output:**
+```
+You have 3 modules installed.
+
++-----------+-----------------------+------------------+
+| Module    | Path                  | Namespace        |
++-----------+-----------------------+------------------+
+| blog      | app-modules/blog      | Modules\Blog     |
+| shop      | app-modules/shop      | Modules\Shop     |
+| analytics | app-modules/analytics | Modules\Analytics|
++-----------+-----------------------+------------------+
+```
+
+### Module with multiple namespaces
+
+If a module registers multiple namespaces, the table adjusts automatically:
+
+```
+You have 2 modules installed.
+
++------+-------------------+---------------------------+
+| Module | Path            | Namespaces                |
++------+-------------------+---------------------------+
+| blog | app-modules/blog | Modules\Blog, Blog\Api    |
+| shop | app-modules/shop | Modules\Shop              |
++------+-------------------+---------------------------+
+```
+
+<Note>
+  The column header changes from "Namespace" to "Namespaces" (plural) when any module has multiple namespaces registered.
+</Note>
+
+## Output Details
+
+### Module Column
+Displays the module's composer package name (typically in kebab-case).
+
+### Path Column
+Shows the relative path from your Laravel application root to the module directory. Paths are normalized to use forward slashes for consistency across operating systems.
+
+### Namespace Column
+Lists the PHP namespace(s) registered by the module. Multiple namespaces are comma-separated.
+
+## When to Use
+
+Use `modules:list` to:
+
+- **Verify module installation** - Confirm a module is properly registered
+- **Check namespace configuration** - See the actual namespaces Laravel will use
+- **Debug autoloading issues** - Verify paths and namespaces match expectations
+- **Get an overview** - See all modules at a glance during development
+- **Document your architecture** - Capture current module structure
+
+## No Modules Installed
+
+If no modules are found:
+
+```
+You have 0 modules installed.
+
++--------+------+-----------+
+| Module | Path | Namespace |
++--------+------+-----------+
++--------+------+-----------+
+```
+
+## Troubleshooting
+
+### Module not appearing in list?
+
+1. **Check composer.json** - Ensure the module is in your root `composer.json` require section
+2. **Run composer update** - Install the module dependency:
+   ```bash
+   composer update your-vendor/module-name
+   ```
+3. **Clear module cache** - Refresh the module registry:
+   ```bash
+   php artisan modules:clear
+   ```
+4. **Verify module structure** - Ensure the module has a valid `composer.json` with proper autoload configuration
+
+### Wrong namespace showing?
+
+The namespace comes from your module's `composer.json` autoload configuration. Check the PSR-4 autoload section:
+
+```json
+"autoload": {
+    "psr-4": {
+        "Modules\\Blog\\": "src/"
+    }
+}
+```
+
+## Related Commands
+
+- [make:module](/cli/make-module) - Create a new module
+- [modules:cache](/cli/modules-cache) - Cache module registry for performance
+- [modules:clear](/cli/modules-clear) - Clear module cache
+- [modules:sync](/cli/modules-sync) - Sync IDE and test configuration

@@ -1,0 +1,586 @@
+---
+title: 'Module Structure'
+description: 'Understanding the standard directory structure and conventions for modules'
+---
+
+## Standard Module Layout
+
+Laravel Modular follows Laravel's conventions with a standard directory structure:
+
+```
+app-modules/
+└── user-management/
+    ├── composer.json
+    ├── database/
+    │   ├── factories/
+    │   ├── migrations/
+    │   └── seeders/
+    ├── resources/
+    │   ├── lang/
+    │   └── views/
+    ├── routes/
+    │   ├── api.php
+    │   └── web.php
+    ├── src/
+    │   ├── Console/
+    │   │   └── Commands/
+    │   ├── Events/
+    │   ├── Listeners/
+    │   ├── Models/
+    │   ├── Policies/
+    │   ├── Providers/
+    │   │   └── UserManagementServiceProvider.php
+    │   └── View/
+    │       └── Components/
+    └── tests/
+```
+
+<Note>
+  This structure mirrors a standard Laravel application, making it familiar to Laravel developers.
+</Note>
+
+## Required Files
+
+### composer.json
+
+Every module must have a `composer.json` file in its root:
+
+```json
+{
+  "name": "modules/user-management",
+  "description": "User management module",
+  "type": "library",
+  "version": "1.0",
+  "license": "proprietary",
+  "require": {},
+  "autoload": {
+    "psr-4": {
+      "Modules\\UserManagement\\": "src/",
+      "Modules\\UserManagement\\Tests\\": "tests/",
+      "Modules\\UserManagement\\Database\\Factories\\": "database/factories/",
+      "Modules\\UserManagement\\Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "minimum-stability": "stable",
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\UserManagement\\Providers\\UserManagementServiceProvider"
+      ]
+    }
+  }
+}
+```
+
+<Accordion title="PSR-4 Autoload Mappings">
+  The `autoload.psr-4` section defines namespace-to-directory mappings:
+  
+  - `Modules\\UserManagement\\` → `src/` (main source code)
+  - `Modules\\UserManagement\\Tests\\` → `tests/` (tests)
+  - `Modules\\UserManagement\\Database\\Factories\\` → `database/factories/` (factories)
+  - `Modules\\UserManagement\\Database\\Seeders\\` → `database/seeders/` (seeders)
+</Accordion>
+
+<Accordion title="Laravel Auto-Discovery">
+  The `extra.laravel.providers` section allows Laravel to auto-discover service providers:
+  
+  ```json
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\UserManagement\\Providers\\UserManagementServiceProvider"
+      ]
+    }
+  }
+  ```
+  
+  This is optional but recommended for modules that need custom service providers.
+</Accordion>
+
+## Directory Conventions
+
+### Source Directory (src/)
+
+The `src/` directory contains all PHP source code:
+
+<CardGroup cols={2}>
+  <Card title="Console/Commands/" icon="terminal">
+    Artisan commands
+  </Card>
+  <Card title="Events/" icon="bolt">
+    Event classes
+  </Card>
+  <Card title="Listeners/" icon="ear-listen">
+    Event listeners
+  </Card>
+  <Card title="Models/" icon="database">
+    Eloquent models
+  </Card>
+  <Card title="Policies/" icon="shield">
+    Authorization policies
+  </Card>
+  <Card title="Providers/" icon="server">
+    Service providers
+  </Card>
+  <Card title="View/Components/" icon="code">
+    Blade components
+  </Card>
+  <Card title="Http/Controllers/" icon="route">
+    HTTP controllers
+  </Card>
+</CardGroup>
+
+### Database Directory
+
+```
+database/
+├── factories/      # Model factories
+├── migrations/     # Database migrations
+└── seeders/        # Database seeders
+```
+
+<Info>
+  Migrations are automatically discovered and can be run with `php artisan migrate`.
+</Info>
+
+### Resources Directory
+
+```
+resources/
+├── lang/          # Translation files
+│   ├── en.json
+│   └── en/
+│       └── messages.php
+└── views/         # Blade templates
+    ├── index.blade.php
+    └── components/
+        └── alert.blade.php
+```
+
+Views are automatically registered with a namespace matching the module name:
+
+```php
+// Access module views using the module name as namespace
+return view('user-management::index');
+
+// Access component views
+return view('user-management::components.alert');
+```
+
+### Routes Directory
+
+```
+routes/
+├── api.php        # API routes
+├── web.php        # Web routes
+└── channels.php   # Broadcasting channels
+```
+
+Route files are loaded alphabetically. You can name them anything:
+
+```
+routes/
+├── 01-api.php
+├── 02-web.php
+└── 03-admin.php
+```
+
+<Warning>
+  Route files are included in alphabetical order. Use numeric prefixes if order matters.
+</Warning>
+
+### Tests Directory
+
+```
+tests/
+├── Feature/
+│   └── UserTest.php
+└── Unit/
+    └── UserModelTest.php
+```
+
+## Namespace Conventions
+
+Modules use PSR-4 namespacing based on the configuration:
+
+### Default Namespace
+
+By default, modules use the `Modules` namespace:
+
+```php
+// config/app-modules.php
+'modules_namespace' => 'Modules',
+```
+
+For a module named `user-management`, classes would be:
+
+```php
+Modules\UserManagement\Models\User
+Modules\UserManagement\Console\Commands\CreateUserCommand
+Modules\UserManagement\Providers\UserManagementServiceProvider
+```
+
+### Custom Namespace
+
+You can configure a custom namespace:
+
+```php
+// config/app-modules.php
+'modules_namespace' => 'MyCompany',
+```
+
+Classes would then be:
+
+```php
+MyCompany\UserManagement\Models\User
+MyCompany\UserManagement\Console\Commands\CreateUserCommand
+```
+
+<Note>
+  Using your company/organization name makes it easier to extract modules to standalone packages later.
+</Note>
+
+## File Naming Conventions
+
+### Models
+
+```php
+// src/Models/User.php
+namespace Modules\UserManagement\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class User extends Model
+{
+    //
+}
+```
+
+### Controllers
+
+```php
+// src/Http/Controllers/UserController.php
+namespace Modules\UserManagement\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+
+class UserController extends Controller
+{
+    //
+}
+```
+
+### Commands
+
+```php
+// src/Console/Commands/CreateUserCommand.php
+namespace Modules\UserManagement\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class CreateUserCommand extends Command
+{
+    protected $signature = 'user:create';
+    //
+}
+```
+
+### Policies
+
+```php
+// src/Policies/UserPolicy.php
+namespace Modules\UserManagement\Policies;
+
+use Modules\UserManagement\Models\User;
+
+class UserPolicy
+{
+    public function update(User $user, User $model)
+    {
+        return $user->id === $model->id;
+    }
+}
+```
+
+<Info>
+  Policies are automatically discovered and mapped to models by the `GatePlugin`.
+</Info>
+
+## Service Provider Structure
+
+Modules can have optional service providers:
+
+```php
+// src/Providers/UserManagementServiceProvider.php
+namespace Modules\UserManagement\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class UserManagementServiceProvider extends ServiceProvider
+{
+    public function register()
+    {
+        // Register bindings
+        $this->app->singleton(UserRepository::class);
+    }
+    
+    public function boot()
+    {
+        // Boot logic (if needed)
+        $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
+    }
+}
+```
+
+<Warning>
+  Most modules don't need custom service providers. Only create one if you need to register services or run boot logic.
+</Warning>
+
+## Example Module: test-module
+
+Here's the structure from Laravel Modular's test suite:
+
+```php
+// composer.json
+{
+  "name": "modules/test-module",
+  "description": "",
+  "type": "library",
+  "version": "1.0",
+  "license": "proprietary",
+  "autoload": {
+    "psr-4": {
+      "Modules\\TestModule\\": "src/",
+      "Modules\\TestModule\\Tests\\": "tests/",
+      "Modules\\TestModule\\Database\\Factories\\": "database/factories/",
+      "Modules\\TestModule\\Database\\Seeders\\": "database/seeders/"
+    }
+  }
+}
+```
+
+```php
+// src/Models/TestModel.php
+namespace Modules\TestModule\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class TestModel extends Model
+{
+    protected $fillable = ['name', 'email'];
+}
+```
+
+```php
+// src/Policies/TestModelPolicy.php
+namespace Modules\TestModule\Policies;
+
+class TestModelPolicy
+{
+    public function view($user, $model)
+    {
+        return true;
+    }
+}
+```
+
+```php
+// src/Console/Commands/TestCommand.php
+namespace Modules\TestModule\Console\Commands;
+
+use Illuminate\Console\Command;
+
+class TestCommand extends Command
+{
+    protected $signature = 'test:command';
+    protected $description = 'Test command';
+    
+    public function handle()
+    {
+        $this->info('Test command executed!');
+    }
+}
+```
+
+```php
+// src/View/Components/Alert.php
+namespace Modules\TestModule\View\Components;
+
+use Illuminate\View\Component;
+
+class Alert extends Component
+{
+    public function __construct(
+        public string $type = 'info'
+    ) {}
+    
+    public function render()
+    {
+        return view('test-module::components.alert');
+    }
+}
+```
+
+```blade
+<!-- resources/views/components/alert.blade.php -->
+<div class="alert alert-{{ $type }}">
+    {{ $slot }}
+</div>
+```
+
+```php
+// routes/test-module-routes.php
+use Illuminate\Support\Facades\Route;
+
+Route::get('/test', function() {
+    return view('test-module::index');
+});
+```
+
+## Discovery Paths
+
+Laravel Modular uses the `FinderFactory` to discover files in specific locations:
+
+<Accordion title="Commands">
+  **Location:** `*/src/Console/Commands/*.php`
+  
+  **Finder:**
+  ```php
+  public function commandFileFinder(): FinderCollection
+  {
+      return FinderCollection::forFiles()
+          ->name('*.php')
+          ->inOrEmpty($this->base_path.'/*/src/Console/Commands');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Routes">
+  **Location:** `*/routes/*.php` (depth 0, sorted by name)
+  
+  **Finder:**
+  ```php
+  public function routeFileFinder(): FinderCollection
+  {
+      return FinderCollection::forFiles()
+          ->depth(0)
+          ->name('*.php')
+          ->sortByName()
+          ->inOrEmpty($this->base_path.'/*/routes');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Views">
+  **Location:** `*/resources/views` (directories)
+  
+  **Finder:**
+  ```php
+  public function viewDirectoryFinder(): FinderCollection
+  {
+      return FinderCollection::forDirectories()
+          ->depth(0)
+          ->name('views')
+          ->inOrEmpty($this->base_path.'/*/resources/');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Migrations">
+  **Location:** `*/database/migrations` (directories)
+  
+  **Finder:**
+  ```php
+  public function migrationDirectoryFinder(): FinderCollection
+  {
+      return FinderCollection::forDirectories()
+          ->depth(0)
+          ->name('migrations')
+          ->inOrEmpty($this->base_path.'/*/database/');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Models">
+  **Location:** `*/src/Models/*.php`
+  
+  **Finder:**
+  ```php
+  public function modelFileFinder(): FinderCollection
+  {
+      return FinderCollection::forFiles()
+          ->name('*.php')
+          ->inOrEmpty($this->base_path.'/*/src/Models');
+  }
+  ```
+</Accordion>
+
+<Accordion title="Blade Components">
+  **Location:** `*/src/View/Components/*.php`
+  
+  **Finder:**
+  ```php
+  public function bladeComponentFileFinder(): FinderCollection
+  {
+      return FinderCollection::forFiles()
+          ->name('*.php')
+          ->inOrEmpty($this->base_path.'/*/src/View/Components');
+  }
+  ```
+</Accordion>
+
+## Best Practices
+
+### Keep Modules Focused
+
+Each module should have a single, clear purpose:
+
+- `user-management` - User CRUD and authentication
+- `billing` - Payment processing and invoicing
+- `notifications` - Email and SMS notifications
+
+### Use Consistent Naming
+
+- Module directory: `kebab-case` (e.g., `user-management`)
+- Namespace: `PascalCase` (e.g., `UserManagement`)
+- Classes: `PascalCase` (e.g., `UserController`)
+- Files: Match class name (e.g., `UserController.php`)
+
+### Leverage Laravel Conventions
+
+- Models in `src/Models`
+- Controllers in `src/Http/Controllers`
+- Commands in `src/Console/Commands`
+- Policies in `src/Policies`
+
+<Info>
+  Following Laravel's conventions ensures automatic discovery and a familiar structure for all developers.
+</Info>
+
+### Minimal Service Providers
+
+Only create service providers when you need to:
+
+- Register singleton bindings
+- Load additional migrations
+- Publish assets or config files
+- Run boot-time logic
+
+Most modules don't need custom service providers.
+
+### Document Module Dependencies
+
+If your module depends on other modules, document it:
+
+```json
+// composer.json
+{
+  "require": {
+    "modules/user-management": "^1.0"
+  }
+}
+```
+
+<Warning>
+  Inter-module dependencies can make your application harder to maintain. Consider if the functionality belongs in a shared module instead.
+</Warning>

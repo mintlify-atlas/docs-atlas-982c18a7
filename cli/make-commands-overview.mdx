@@ -1,0 +1,207 @@
+---
+title: 'Make Commands Overview'
+description: 'Generate module components using Laravel Artisan make commands with the --module option'
+---
+
+## Introduction
+
+Laravel Modular extends Laravel's built-in `make:*` commands by adding a `--module` option. This allows you to generate components directly within your modules while maintaining Laravel conventions and using your custom stubs.
+
+## Available Make Commands
+
+All standard Laravel `make:*` commands support the `--module` option:
+
+<CardGroup cols={2}>
+
+<Card title="Controllers" icon="code" href="/cli/make-controller">
+  Generate controllers with routing and resource options
+</Card>
+
+<Card title="Models" icon="database" href="/cli/make-model">
+  Create Eloquent models with migrations and factories
+</Card>
+
+<Card title="Migrations" icon="table" href="/cli/make-migration">
+  Generate database migrations in your module
+</Card>
+
+<Card title="Providers" icon="gears" href="/cli/make-provider">
+  Create service providers for your module
+</Card>
+
+<Card title="Commands" icon="terminal" href="/cli/make-command">
+  Build Artisan console commands
+</Card>
+
+</CardGroup>
+
+### Complete Command List
+
+The following commands all support the `--module` option:
+
+- `make:cast` - Create a new custom Eloquent cast class
+- `make:channel` - Create a new channel class
+- `make:command` - Create a new Artisan command
+- `make:component` - Create a new view component class
+- `make:controller` - Create a new controller class
+- `make:event` - Create a new event class
+- `make:exception` - Create a new custom exception class
+- `make:factory` - Create a new model factory
+- `make:job` - Create a new job class
+- `make:listener` - Create a new event listener class
+- `make:mail` - Create a new email class
+- `make:middleware` - Create a new middleware class
+- `make:migration` - Create a new migration file
+- `make:model` - Create a new Eloquent model class
+- `make:notification` - Create a new notification class
+- `make:observer` - Create a new observer class
+- `make:policy` - Create a new policy class
+- `make:provider` - Create a new service provider class
+- `make:request` - Create a new form request class
+- `make:resource` - Create a new resource class
+- `make:rule` - Create a new validation rule
+- `make:seeder` - Create a new seeder class
+- `make:test` - Create a new test class
+
+## How the --module Option Works
+
+### Namespace Resolution
+
+When you use the `--module` option, components are generated with your module's namespace instead of the application namespace.
+
+<CodeGroup>
+
+```bash Without --module
+php artisan make:controller UserController
+# Creates: app/Http/Controllers/UserController.php
+# Namespace: App\Http\Controllers
+```
+
+```bash With --module
+php artisan make:controller UserController --module=my-module
+# Creates: app-modules/my-module/src/Http/Controllers/UserController.php
+# Namespace: Modules\MyModule\Http\Controllers
+```
+
+</CodeGroup>
+
+### Directory Structure
+
+Components are created in your module's `src/` directory following Laravel conventions:
+
+```
+app-modules/
+  my-module/
+    src/
+      Console/
+      Http/
+        Controllers/
+        Middleware/
+      Models/
+      Providers/
+    database/
+      migrations/
+      factories/
+      seeders/
+    tests/
+```
+
+### Custom Stubs Support
+
+The `--module` option works seamlessly with [Laravel's stub customization](https://laravel.com/docs/artisan#stub-customization):
+
+<Steps>
+  <Step title="Publish Laravel stubs">
+    ```bash
+    php artisan stub:publish
+    ```
+  </Step>
+  <Step title="Customize stubs in stubs/ directory">
+    Edit the published stubs to match your preferences
+  </Step>
+  <Step title="Generate components">
+    Your customized stubs will be used when generating module components
+  </Step>
+</Steps>
+
+## Usage Patterns
+
+### Basic Usage
+
+```bash
+php artisan make:{type} {ClassName} --module={module-name}
+```
+
+<ParamField path="type" type="string" required>
+  The type of component (controller, model, migration, etc.)
+</ParamField>
+
+<ParamField path="ClassName" type="string" required>
+  The name of the class to generate
+</ParamField>
+
+<ParamField path="module-name" type="string" required>
+  The kebab-case name of your module
+</ParamField>
+
+### With Additional Options
+
+All Laravel command options work with `--module`:
+
+```bash
+# Create a resource controller
+php artisan make:controller PostController --resource --module=blog
+
+# Create a model with migration and factory
+php artisan make:model Post -mf --module=blog
+
+# Create a test in the Feature directory
+php artisan make:test PostTest --module=blog
+```
+
+<Tip>
+  You can combine `--module` with any other options the base Laravel command supports.
+</Tip>
+
+## Examples
+
+### Generate Multiple Related Components
+
+```bash
+# Create model with migration, factory, and resource controller
+php artisan make:model Post -mfcr --module=blog
+
+# Create form request for validation
+php artisan make:request StorePostRequest --module=blog
+
+# Create policy for authorization
+php artisan make:policy PostPolicy --module=blog
+```
+
+### Organize by Feature
+
+```bash
+# User management module
+php artisan make:controller Auth/LoginController --module=user-management
+php artisan make:request Auth/LoginRequest --module=user-management
+php artisan make:middleware EnsureEmailIsVerified --module=user-management
+```
+
+## Module Context
+
+When generating components within a module, the package automatically:
+
+1. **Resolves the correct namespace** based on your module configuration
+2. **Creates files in the module directory** structure
+3. **Updates imports and references** to use module namespaces
+4. **Maintains Laravel conventions** for directory organization
+
+<Note>
+  The `--module` option requires that the module already exists. Create modules using `php artisan make:module {name}` first.
+</Note>
+
+## See Also
+
+- [Creating a New Module](/cli/make-module)
+- [Module Structure](/concepts/module-structure)
+- [Laravel Artisan Documentation](https://laravel.com/docs/artisan)

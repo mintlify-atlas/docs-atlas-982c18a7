@@ -1,0 +1,362 @@
+---
+title: Plugin System
+description: Extend Laravel Modular with custom plugins that discover and register module resources
+---
+
+The plugin system is Laravel Modular's extensibility mechanism that allows you to discover and register module resources automatically. Plugins are classes that implement a discovery pattern to find resources across all modules and handle their registration with Laravel.
+
+## How Plugins Work
+
+Every plugin follows a two-phase lifecycle:
+
+1. **Discovery Phase**: Scan module directories for specific resources
+2. **Handling Phase**: Register discovered resources with Laravel services
+
+Plugins extend the base `Plugin` class and implement two core methods:
+
+```php
+abstract class Plugin
+{
+    abstract public function discover(FinderFactory $finders): iterable;
+    abstract public function handle(Collection $data);
+}
+```
+
+## Creating a Custom Plugin
+
+Here's how to create a custom plugin that discovers and registers custom resources.
+
+<Steps>
+
+### Create the Plugin Class
+
+Extend the base `Plugin` class:
+
+```php
+use InterNACHI\Modular\Plugins\Plugin;
+use InterNACHI\Modular\Support\FinderFactory;
+use Illuminate\Support\Collection;
+
+class CustomPlugin extends Plugin
+{
+    public function discover(FinderFactory $finders): iterable
+    {
+        // Return discovered resources
+    }
+    
+    public function handle(Collection $data): void
+    {
+        // Register resources with Laravel
+    }
+}
+```
+
+### Implement Discovery Logic
+
+Use the `FinderFactory` to locate resources across modules:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->commandFileFinder() // Built-in finder for commands
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $file) => $file->fullyQualifiedClassName())
+        ->filter($this->isValid(...));
+}
+```
+
+### Implement Handling Logic
+
+Register discovered resources with Laravel services:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(function(string $class) {
+        // Register with Laravel service
+        app()->singleton($class);
+    });
+}
+```
+
+### Register Your Plugin
+
+Add your plugin to the registry in a service provider:
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+
+public function boot()
+{
+    PluginRegistry::register(CustomPlugin::class);
+}
+```
+
+</Steps>
+
+## Boot Lifecycle Attributes
+
+Plugins can use PHP attributes to control when and how they boot:
+
+### AfterResolving Attribute
+
+Boot the plugin after a service is resolved from the container:
+
+```php
+use InterNACHI\Modular\Plugins\Attributes\AfterResolving;
+use Illuminate\View\Compilers\BladeCompiler;
+
+#[AfterResolving(BladeCompiler::class, parameter: 'blade')]
+class BladePlugin extends Plugin
+{
+    public function __construct(
+        protected BladeCompiler $blade
+    ) {}
+}
+```
+
+The `AfterResolving` attribute waits for the `BladeCompiler` to be resolved, then injects it as the `$blade` constructor parameter.
+
+### OnBoot Attribute
+
+Boot the plugin immediately during application boot:
+
+```php
+use InterNACHI\Modular\Plugins\Attributes\OnBoot;
+
+#[OnBoot]
+class CustomPlugin extends Plugin
+{
+    // Boots immediately
+}
+```
+
+## Built-in Plugins
+
+Laravel Modular includes several built-in plugins:
+
+<Accordion title="ArtisanPlugin">
+Discovers and registers Artisan commands from modules.
+
+**Source**: `src/Plugins/ArtisanPlugin.php:31-43`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->commandFileFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $file) => $file->fullyQualifiedClassName())
+        ->filter($this->isInstantiableCommand(...));
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $fqcn) => $this->artisan->resolve($fqcn));
+}
+```
+</Accordion>
+
+<Accordion title="MigratorPlugin">
+Discovers and registers database migration directories.
+
+**Source**: `src/Plugins/MigratorPlugin.php:19-30`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->migrationDirectoryFinder()
+        ->values()
+        ->map(fn(SplFileInfo $file) => $file->getRealPath());
+}
+
+public function handle(Collection $data): void
+{
+    $data->each(fn(string $path) => $this->migrator->path($path));
+}
+```
+</Accordion>
+
+<Accordion title="BladePlugin">
+Discovers and registers Blade components from modules.
+
+**Source**: `src/Plugins/BladePlugin.php:19-52`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return [
+        'files' => $finders
+            ->bladeComponentFileFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'fqcn' => $component->fullyQualifiedClassName(),
+            ])
+            ->toArray(),
+        'directories' => $finders
+            ->bladeComponentDirectoryFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $component) => [
+                'prefix' => $component->module()->name,
+                'namespace' => $component->module()->qualify('View\\Components'),
+            ])
+            ->toArray(),
+    ];
+}
+```
+</Accordion>
+
+<Accordion title="GatePlugin">
+Discovers models and their associated policies, registering them with Laravel's Gate.
+
+**Source**: `src/Plugins/GatePlugin.php:20-52`
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->modelFileFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(function(ModuleFileInfo $file) {
+            $fqcn = $file->fullyQualifiedClassName();
+            $namespace = rtrim($file->module()->namespaces->first(), '\\');
+            
+            $candidates = [
+                $namespace.'\\Policies\\'.Str::after($fqcn, 'Models\\').'Policy',
+                $namespace.'\\Policies\\'.Str::afterLast($fqcn, '\\').'Policy',
+            ];
+            
+            foreach ($candidates as $candidate) {
+                if (class_exists($candidate)) {
+                    return [
+                        'fqcn' => $fqcn,
+                        'policy' => $candidate,
+                    ];
+                }
+            }
+            
+            return null;
+        })
+        ->filter();
+}
+```
+</Accordion>
+
+## FinderFactory Methods
+
+The `FinderFactory` provides built-in finders for common module resources:
+
+| Method | Path Pattern | Use Case |
+|--------|-------------|----------|
+| `commandFileFinder()` | `*/src/Console/Commands/*.php` | Artisan commands |
+| `migrationDirectoryFinder()` | `*/database/migrations/` | Database migrations |
+| `modelFileFinder()` | `*/src/Models/*.php` | Eloquent models |
+| `bladeComponentFileFinder()` | `*/src/View/Components/*.php` | Blade component classes |
+| `bladeComponentDirectoryFinder()` | `*/src/View/Components/` | Blade component directories |
+| `routeFileFinder()` | `*/routes/*.php` | Route files |
+| `viewDirectoryFinder()` | `*/resources/views/` | View directories |
+| `langDirectoryFinder()` | `*/resources/lang/` | Translation files |
+| `listenerDirectoryFinder()` | `*/src/Listeners/` | Event listeners |
+| `factoryDirectoryFinder()` | `*/database/factories/` | Model factories |
+
+**Source**: `src/Support/FinderFactory.php`
+
+## Plugin Registry
+
+The `PluginRegistry` manages plugin registration and resolution:
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+
+// Register plugins
+PluginRegistry::register(
+    CustomPlugin::class,
+    AnotherPlugin::class
+);
+
+// Get a plugin instance
+$plugin = app(PluginRegistry::class)->get(CustomPlugin::class);
+```
+
+**Source**: `src/PluginRegistry.php:14-32`
+
+<Info>
+Plugins are resolved as singletons from the Laravel container, so they can inject dependencies through their constructors.
+</Info>
+
+## Best Practices
+
+<Note>
+**Idempotency**: Ensure your plugin's `handle()` method can be called multiple times safely.
+</Note>
+
+<Note>
+**Performance**: Use the appropriate finder methods to minimize filesystem scanning. The `FinderFactory` methods are optimized for specific directory structures.
+</Note>
+
+<Note>
+**Error Handling**: Handle cases where resources might not exist or be malformed gracefully.
+</Note>
+
+<Warning>
+Plugins boot during the application's boot phase. Avoid heavy operations in plugin constructors or discovery methods that could slow down application startup.
+</Warning>
+
+## Example: Custom Config Plugin
+
+Here's a complete example of a plugin that discovers and merges config files from modules:
+
+```php
+use InterNACHI\Modular\Plugins\Plugin;
+use InterNACHI\Modular\Plugins\Attributes\OnBoot;
+use InterNACHI\Modular\Support\FinderFactory;
+use Illuminate\Support\Collection;
+use Illuminate\Contracts\Config\Repository;
+
+#[OnBoot]
+class ConfigPlugin extends Plugin
+{
+    public function __construct(
+        protected Repository $config
+    ) {}
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return FinderCollection::forFiles()
+            ->name('*.php')
+            ->inOrEmpty($finders->base_path . '/*/config')
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $file) => [
+                'key' => $file->module()->name . '.' . $file->getBasename('.php'),
+                'path' => $file->getRealPath(),
+            ]);
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(function(array $item) {
+            $this->config->set($item['key'], require $item['path']);
+        });
+    }
+}
+```
+
+Register it in your service provider:
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+
+public function boot()
+{
+    PluginRegistry::register(ConfigPlugin::class);
+}
+```

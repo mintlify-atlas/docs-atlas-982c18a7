@@ -1,0 +1,547 @@
+---
+title: Customizing Stubs
+description: Customize generator stub templates for new modules
+---
+
+Laravel Modular allows you to customize the stub files used when creating new modules, giving you complete control over the initial structure and boilerplate code.
+
+## What are Stubs?
+
+Stubs are template files used by the `make:module` command to generate initial files for new modules. By default, Laravel Modular creates:
+
+- `composer.json` - Package definition
+- Service Provider - Auto-discovery configuration  
+- Routes file - Initial route definitions
+- `.gitkeep` files - For empty directories
+
+## Default Stubs
+
+Laravel Modular includes default stubs in `vendor/internachi/modular/stubs/`:
+
+<CodeGroup>
+```json composer-stub-latest.json
+{
+  "name": "StubComposerName",
+  "description": "",
+  "type": "library",
+  "version": "1.0",
+  "license": "proprietary",
+  "require": {},
+  "autoload": {
+    "psr-4": {
+      "StubModuleNamespace\\StubClassNamePrefix\\": "src/",
+      "StubModuleNamespace\\StubClassNamePrefix\\Tests\\": "tests/",
+      "StubModuleNamespace\\StubClassNamePrefix\\Database\\Factories\\": "database/factories/",
+      "StubModuleNamespace\\StubClassNamePrefix\\Database\\Seeders\\": "database/seeders/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "StubModuleNamespace\\StubClassNamePrefix\\Providers\\StubClassNamePrefixServiceProvider"
+      ]
+    }
+  }
+}
+```
+
+```php ServiceProvider.php
+<?php
+
+namespace StubModuleNamespace\StubClassNamePrefix\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class StubClassNamePrefixServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+    }
+
+    public function boot(): void
+    {
+    }
+}
+```
+
+```php web-routes.php
+<?php
+```
+</CodeGroup>
+
+## Available Placeholders
+
+Stubs support placeholders that are automatically replaced when generating a module:
+
+<ResponseField name="StubBasePath" type="string">
+  The absolute path to the module directory
+  
+  Example: `/var/www/app-modules/blog`
+</ResponseField>
+
+<ResponseField name="StubModuleNamespace" type="string">
+  The PHP namespace for modules (from config)
+  
+  Example: `Modules` or `Acme`
+</ResponseField>
+
+<ResponseField name="StubComposerNamespace" type="string">
+  The Composer vendor name (kebab-case)
+  
+  Example: `modules` or `acme`
+</ResponseField>
+
+<ResponseField name="StubModuleName" type="string">
+  The module name in kebab-case
+  
+  Example: `blog` or `user-management`
+</ResponseField>
+
+<ResponseField name="StubModuleNameSingular" type="string">
+  Singular form of the module name
+  
+  Example: `blog` or `user`
+</ResponseField>
+
+<ResponseField name="StubModuleNamePlural" type="string">
+  Plural form of the module name
+  
+  Example: `blogs` or `users`
+</ResponseField>
+
+<ResponseField name="StubClassNamePrefix" type="string">
+  The module name in StudlyCase
+  
+  Example: `Blog` or `UserManagement`
+</ResponseField>
+
+<ResponseField name="StubComposerName" type="string">
+  Full Composer package name
+  
+  Example: `modules/blog` or `acme/user-management`
+</ResponseField>
+
+<ResponseField name="StubMigrationPrefix" type="string">
+  Timestamp prefix for migrations
+  
+  Example: `2024_01_15_120000`
+</ResponseField>
+
+<ResponseField name="StubFullyQualifiedTestCaseBase" type="string">
+  Fully qualified test base class name
+  
+  Example: `Tests\TestCase`
+</ResponseField>
+
+<ResponseField name="StubTestCaseBase" type="string">
+  Base name of test class (without namespace)
+  
+  Example: `TestCase`
+</ResponseField>
+
+## Configuring Custom Stubs
+
+<Steps>
+  <Step title="Publish the config file">
+    ```bash
+    php artisan vendor:publish --tag=modular-config
+    ```
+    
+    This creates `config/app-modules.php`.
+  </Step>
+
+  <Step title="Create your stub files">
+    Create a directory for your custom stubs:
+    
+    ```bash
+    mkdir -p stubs/app-modules
+    ```
+  </Step>
+
+  <Step title="Configure the stubs array">
+    Edit `config/app-modules.php` and add your custom stubs:
+    
+    ```php config/app-modules.php
+    'stubs' => [
+        'src/Providers/StubClassNamePrefixServiceProvider.php' => base_path('stubs/app-modules/ServiceProvider.php'),
+        'routes/StubModuleName-routes.php' => base_path('stubs/app-modules/routes.php'),
+        'README.md' => base_path('stubs/app-modules/README.md'),
+    ],
+    ```
+  </Step>
+</Steps>
+
+## Custom Stub Examples
+
+### Enhanced Service Provider
+
+Create a service provider with additional boilerplate:
+
+```php stubs/app-modules/ServiceProvider.php
+<?php
+
+namespace StubModuleNamespace\StubClassNamePrefix\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class StubClassNamePrefixServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        $this->mergeConfigFrom(
+            __DIR__.'/../../config/StubModuleName.php',
+            'StubModuleName'
+        );
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        $this->loadViewsFrom(__DIR__.'/../../resources/views', 'StubModuleName');
+        $this->loadMigrationsFrom(__DIR__.'/../../database/migrations');
+        
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../../config/StubModuleName.php' => config_path('StubModuleName.php'),
+            ], 'StubModuleName-config');
+        }
+    }
+}
+```
+
+### Custom Routes Template
+
+Create a routes file with common patterns:
+
+```php stubs/app-modules/routes.php
+<?php
+
+use Illuminate\Support\Facades\Route;
+use StubModuleNamespace\StubClassNamePrefix\Controllers\StubClassNamePrefixController;
+
+/*
+|--------------------------------------------------------------------------
+| StubClassNamePrefix Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register routes for the StubClassNamePrefix module.
+|
+*/
+
+Route::middleware('web')
+    ->prefix('StubModuleName')
+    ->name('StubModuleName.')
+    ->group(function () {
+        Route::get('/', [StubClassNamePrefixController::class, 'index'])
+            ->name('index');
+    });
+```
+
+### Module README
+
+Include documentation for each module:
+
+```markdown stubs/app-modules/README.md
+# StubClassNamePrefix Module
+
+This module handles StubModuleName functionality.
+
+## Installation
+
+This module is automatically loaded via Composer package discovery.
+
+## Structure
+
+- `src/` - PHP source code
+- `resources/views/` - Blade templates  
+- `routes/` - Route definitions
+- `database/` - Migrations, factories, and seeders
+- `tests/` - PHPUnit tests
+
+## Routes
+
+All routes are prefixed with `/StubModuleName` and named with `StubModuleName.`
+
+## Testing
+
+```bash
+php artisan test --filter=StubClassNamePrefix
+```
+
+## License
+
+Proprietary
+```
+
+### Module Config File
+
+Include a config file stub:
+
+```php stubs/app-modules/config.php
+<?php
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | StubClassNamePrefix Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration options for the StubClassNamePrefix module.
+    |
+    */
+    
+    'enabled' => true,
+    
+    'settings' => [
+        'per_page' => 15,
+    ],
+];
+```
+
+Configure it:
+
+```php config/app-modules.php
+'stubs' => [
+    'config/StubModuleName.php' => base_path('stubs/app-modules/config.php'),
+    // ... other stubs
+],
+```
+
+### Initial Controller
+
+Create modules with a default controller:
+
+```php stubs/app-modules/Controller.php
+<?php
+
+namespace StubModuleNamespace\StubClassNamePrefix\Controllers;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+
+class StubClassNamePrefixController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        return view('StubModuleName::index');
+    }
+}
+```
+
+Configure:
+
+```php config/app-modules.php
+'stubs' => [
+    'src/Controllers/StubClassNamePrefixController.php' => base_path('stubs/app-modules/Controller.php'),
+    // ... other stubs
+],
+```
+
+## Complete Custom Configuration
+
+Here's a complete example with multiple custom stubs:
+
+```php config/app-modules.php
+<?php
+
+return [
+    'modules_namespace' => 'Acme',
+    'modules_vendor' => 'acme',
+    'modules_directory' => 'app-modules',
+    
+    'stubs' => [
+        // Core files
+        'composer.json' => base_path('stubs/app-modules/composer.json'),
+        'src/Providers/StubClassNamePrefixServiceProvider.php' => base_path('stubs/app-modules/ServiceProvider.php'),
+        
+        // Routes and controllers
+        'routes/web.php' => base_path('stubs/app-modules/routes.php'),
+        'src/Controllers/StubClassNamePrefixController.php' => base_path('stubs/app-modules/Controller.php'),
+        
+        // Configuration
+        'config/StubModuleName.php' => base_path('stubs/app-modules/config.php'),
+        
+        // Views
+        'resources/views/index.blade.php' => base_path('stubs/app-modules/index.blade.php'),
+        'resources/views/layouts/app.blade.php' => base_path('stubs/app-modules/layout.blade.php'),
+        
+        // Documentation
+        'README.md' => base_path('stubs/app-modules/README.md'),
+        
+        // Git
+        '.gitignore' => base_path('stubs/app-modules/.gitignore'),
+        
+        // Keep empty directories
+        'database/factories/.gitkeep' => base_path('stubs/app-modules/.gitkeep'),
+        'database/migrations/.gitkeep' => base_path('stubs/app-modules/.gitkeep'),
+        'database/seeders/.gitkeep' => base_path('stubs/app-modules/.gitkeep'),
+        'tests/.gitkeep' => base_path('stubs/app-modules/.gitkeep'),
+    ],
+];
+```
+
+## Stub File Paths
+
+<Note>
+  Stub configuration uses two paths:
+  - **Key**: Destination path relative to module root (supports placeholders)
+  - **Value**: Absolute path to stub file (use `base_path()` helper)
+</Note>
+
+### Destination Path (Key)
+
+The destination supports placeholders:
+
+```php
+'src/Providers/StubClassNamePrefixServiceProvider.php' => '...'
+'routes/StubModuleName-routes.php' => '...'
+'config/StubModuleName.php' => '...'
+```
+
+### Stub Path (Value)
+
+Use absolute paths with the `base_path()` helper:
+
+```php
+base_path('stubs/app-modules/ServiceProvider.php')
+base_path('stubs/app-modules/routes.php')
+```
+
+## Using Custom Stubs
+
+Once configured, your custom stubs are automatically used:
+
+```bash
+php artisan make:module blog
+```
+
+This generates a module using all your custom stubs with placeholders replaced:
+
+```
+app-modules/blog/
+├── composer.json
+├── README.md
+├── config/
+│   └── blog.php
+├── routes/
+│   └── web.php
+├── src/
+│   ├── Controllers/
+│   │   └── BlogController.php
+│   └── Providers/
+│       └── BlogServiceProvider.php
+├── resources/
+│   └── views/
+│       ├── index.blade.php
+│       └── layouts/
+│           └── app.blade.php
+├── database/
+│   ├── factories/
+│   ├── migrations/
+│   └── seeders/
+└── tests/
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Keep Stubs in Version Control">
+    Store custom stubs in your repository:
+    
+    ```
+    stubs/
+    └── app-modules/
+        ├── ServiceProvider.php
+        ├── Controller.php
+        ├── routes.php
+        └── README.md
+    ```
+  </Accordion>
+
+  <Accordion title="Use Consistent Placeholders">
+    Always use the correct placeholder format:
+    
+    ```php
+    // Good
+    namespace StubModuleNamespace\StubClassNamePrefix;
+    
+    // Bad - won't be replaced
+    namespace {{namespace}}\{{class}};
+    ```
+  </Accordion>
+
+  <Accordion title="Test Your Stubs">
+    After creating custom stubs, test them:
+    
+    ```bash
+    php artisan make:module test-stub
+    # Verify all files are created correctly
+    # Delete the test module
+    rm -rf app-modules/test-stub
+    ```
+  </Accordion>
+
+  <Accordion title="Document Your Conventions">
+    Include a README stub that explains your module structure and conventions.
+  </Accordion>
+
+  <Accordion title="Keep Stubs Minimal">
+    Only include essential boilerplate. Developers can add more as needed.
+  </Accordion>
+</AccordionGroup>
+
+## Disabling Custom Stubs
+
+To use default stubs again, set the config to `null`:
+
+```php config/app-modules.php
+'stubs' => null,
+```
+
+## Troubleshooting
+
+### Placeholders Not Replaced
+
+Ensure you're using the exact placeholder names:
+
+```php
+// These exact strings (case-sensitive):
+StubModuleNamespace
+StubClassNamePrefix
+StubModuleName
+StubComposerName
+```
+
+### Files Not Generated
+
+Check that:
+1. Stub file paths are absolute (use `base_path()`)
+2. Stub files exist at the specified paths
+3. The stub configuration is properly formatted
+
+### Wrong File Permissions
+
+Stub files should be readable:
+
+```bash
+chmod 644 stubs/app-modules/*
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Modules" icon="folder-plus" href="/guides/creating-modules">
+    Learn how to create modules with your custom stubs
+  </Card>
+  <Card title="Module Components" icon="puzzle-piece" href="/guides/module-components">
+    Create components within your modules
+  </Card>
+</CardGroup>

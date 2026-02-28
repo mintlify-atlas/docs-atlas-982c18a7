@@ -1,0 +1,280 @@
+---
+title: TranslatorPlugin
+description: Registers translation namespaces and JSON paths from modules
+---
+
+The `TranslatorPlugin` automatically discovers and registers translation files from all enabled modules, making module translations available through Laravel's localization system.
+
+## Overview
+
+This plugin scans each module's `lang` directory and registers it as a translation namespace. It supports both PHP translation files and JSON translation files.
+
+## Source Location
+
+`InterNACHI\Modular\Plugins\TranslatorPlugin`
+
+## Activation
+
+The plugin uses the `AfterResolving` attribute to activate when the translator is resolved:
+
+```php
+#[AfterResolving(Translator::class, parameter: 'translator')]
+class TranslatorPlugin extends Plugin
+```
+
+<Info>
+This plugin automatically activates after the translator is resolved from the service container.
+</Info>
+
+## How It Works
+
+### 1. Discovery Phase
+
+The `discover()` method finds all language directories:
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->langDirectoryFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $dir) => [
+            'namespace' => $dir->module()->name,
+            'path' => $dir->getRealPath(),
+        ]);
+}
+```
+
+### 2. Registration Phase
+
+The `handle()` method registers each namespace and JSON path:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(function(array $row) {
+        $this->translator->addNamespace($row['namespace'], $row['path']);
+        $this->translator->addJsonPath($row['path']);
+    });
+}
+```
+
+<Note>
+Each module's translations are namespaced by the module name, preventing conflicts between modules.
+</Note>
+
+## Expected Module Structure
+
+For translations to be discovered, they must be located in:
+
+```
+app-modules/
+└── blog/
+    └── lang/
+        ├── en/
+        │   ├── messages.php
+        │   └── validation.php
+        ├── es/
+        │   ├── messages.php
+        │   └── validation.php
+        ├── en.json
+        └── es.json
+```
+
+## Translation Types
+
+### PHP Translation Files
+
+PHP translation files return associative arrays:
+
+`lang/en/messages.php`:
+
+```php
+return [
+    'welcome' => 'Welcome to our blog',
+    'post_created' => 'Post created successfully',
+    'post_updated' => 'Post updated successfully',
+    'post_deleted' => 'Post deleted successfully',
+];
+```
+
+### JSON Translation Files
+
+JSON files provide key-value translations:
+
+`lang/en.json`:
+
+```json
+{
+    "Welcome to our blog": "Welcome to our blog",
+    "Post created successfully": "Post created successfully"
+}
+```
+
+## Usage
+
+### Accessing PHP Translations
+
+Use the module namespace prefix with double colon:
+
+```php
+// In controllers or other PHP files
+__('blog::messages.welcome');
+
+// With parameters
+__('blog::messages.greeting', ['name' => 'John']);
+
+// Using the trans() helper
+trans('blog::messages.welcome');
+```
+
+### In Blade Templates
+
+```blade
+{{ __('blog::messages.welcome') }}
+
+{{ __('blog::messages.greeting', ['name' => $user->name]) }}
+
+@lang('blog::messages.welcome')
+```
+
+### Accessing JSON Translations
+
+JSON translations don't require a namespace:
+
+```php
+__('Welcome to our blog');
+```
+
+```blade
+{{ __('Welcome to our blog') }}
+```
+
+## Pluralization
+
+Module translations support Laravel's pluralization features:
+
+`lang/en/messages.php`:
+
+```php
+return [
+    'posts_count' => '{0} No posts|{1} One post|[2,*] :count posts',
+];
+```
+
+Usage:
+
+```php
+trans_choice('blog::messages.posts_count', 0); // "No posts"
+trans_choice('blog::messages.posts_count', 1); // "One post"
+trans_choice('blog::messages.posts_count', 5); // "5 posts"
+```
+
+## Nested Translations
+
+Organize translations using nested arrays:
+
+`lang/en/messages.php`:
+
+```php
+return [
+    'posts' => [
+        'create' => 'Create new post',
+        'edit' => 'Edit post',
+        'delete' => 'Delete post',
+    ],
+    'comments' => [
+        'add' => 'Add comment',
+        'edit' => 'Edit comment',
+    ],
+];
+```
+
+Access with dot notation:
+
+```php
+__('blog::messages.posts.create');
+__('blog::messages.comments.add');
+```
+
+## Locale Fallback
+
+<Info>
+Laravel's fallback locale configuration applies to module translations. If a key isn't found in the current locale, Laravel will check the fallback locale.
+</Info>
+
+Configure in `config/app.php`:
+
+```php
+'fallback_locale' => 'en',
+```
+
+## Validation Messages
+
+Modules can define custom validation messages:
+
+`lang/en/validation.php`:
+
+```php
+return [
+    'required' => 'The :attribute field is required.',
+    'unique' => 'The :attribute has already been taken.',
+    
+    'attributes' => [
+        'title' => 'post title',
+        'content' => 'post content',
+    ],
+];
+```
+
+Use in form requests:
+
+```php
+public function messages()
+{
+    return [
+        'title.required' => __('blog::validation.required', ['attribute' => 'title']),
+    ];
+}
+```
+
+## Publishing Translations
+
+If you want to allow users to customize module translations, you can publish them:
+
+```php
+// In a service provider
+public function boot()
+{
+    $this->publishes([
+        __DIR__.'/../lang' => $this->app->langPath('vendor/blog'),
+    ], 'blog-translations');
+}
+```
+
+Users can then publish and customize:
+
+```bash
+php artisan vendor:publish --tag=blog-translations
+```
+
+## Testing
+
+Test translations in your module tests:
+
+```php
+public function test_welcome_message_is_translated()
+{
+    $this->app->setLocale('es');
+    
+    $message = __('blog::messages.welcome');
+    
+    $this->assertEquals('Bienvenido a nuestro blog', $message);
+}
+```
+
+## Dependencies
+
+- `Illuminate\Translation\Translator` - Laravel's translator
+- `InterNACHI\Modular\Support\FinderFactory` - Directory discovery

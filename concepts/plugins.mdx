@@ -1,0 +1,570 @@
+---
+title: Plugin system
+description: Deep dive into Laravel Modular's plugin architecture
+---
+
+## What are Plugins?
+
+Plugins are the core mechanism that Laravel Modular uses to discover and register module resources. Each plugin:
+
+- Discovers specific types of files (routes, commands, views, etc.)
+- Registers those files with Laravel's services
+- Runs at the appropriate time in Laravel's lifecycle
+
+## Built-in Plugins
+
+Laravel Modular ships with 9 plugins that handle different Laravel features:
+
+<CardGroup cols={3}>
+  <Card title="ModulesPlugin" icon="folder">
+    Discovers modules via composer.json
+  </Card>
+  <Card title="RoutesPlugin" icon="route">
+    Loads route files
+  </Card>
+  <Card title="ViewPlugin" icon="eye">
+    Registers view namespaces
+  </Card>
+  <Card title="ArtisanPlugin" icon="terminal">
+    Discovers Artisan commands
+  </Card>
+  <Card title="BladePlugin" icon="code">
+    Registers Blade components
+  </Card>
+  <Card title="EventsPlugin" icon="bolt">
+    Auto-discovers event listeners
+  </Card>
+  <Card title="GatePlugin" icon="shield">
+    Maps policies to models
+  </Card>
+  <Card title="MigratorPlugin" icon="database">
+    Registers migration paths
+  </Card>
+  <Card title="TranslatorPlugin" icon="language">
+    Registers translation namespaces
+  </Card>
+</CardGroup>
+
+## Plugin Base Class
+
+All plugins extend the abstract `Plugin` class:
+
+```php
+abstract class Plugin
+{
+    // Boot the plugin (called during app boot)
+    public static function boot(Closure $handler, Application $app): void
+    {
+        static::firstBootableAttribute()?->newInstance()->boot(static::class, $handler, $app);
+    }
+    
+    // Discover files/data in modules
+    abstract public function discover(FinderFactory $finders): iterable;
+    
+    // Process discovered data
+    abstract public function handle(Collection $data);
+}
+```
+
+### Required Methods
+
+<Accordion title="discover()">
+  The `discover()` method scans modules and returns data to be cached:
+  
+  ```php
+  public function discover(FinderFactory $finders): iterable
+  {
+      return $finders
+          ->routeFileFinder()
+          ->values()
+          ->map(fn(SplFileInfo $file) => $file->getRealPath());
+  }
+  ```
+  
+  Returns an iterable (array, Collection, generator) of data.
+</Accordion>
+
+<Accordion title="handle()">
+  The `handle()` method processes the discovered data:
+  
+  ```php
+  public function handle(Collection $data): void
+  {
+      $data->each(fn(string $filename) => require $filename);
+  }
+  ```
+  
+  Receives a Collection of the cached discovery data.
+</Accordion>
+
+## Plugin Lifecycle Attributes
+
+Plugins use PHP 8 attributes to control when they execute:
+
+### OnBoot Attribute
+
+Runs immediately during application boot:
+
+```php
+use InterNACHI\Modular\Plugins\Attributes\OnBoot;
+
+#[OnBoot]
+class RoutesPlugin extends Plugin
+{
+    public static function boot(Closure $handler, Application $app): void
+    {
+        if (! $app->routesAreCached()) {
+            $handler(static::class);
+        }
+    }
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return $finders
+            ->routeFileFinder()
+            ->values()
+            ->map(fn(SplFileInfo $file) => $file->getRealPath());
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(fn(string $filename) => require $filename);
+    }
+}
+```
+
+<Info>
+  The default behavior (no attribute) is `OnBoot`. Most plugins use this pattern.
+</Info>
+
+### AfterResolving Attribute
+
+Runs after a specific service is resolved from the container:
+
+```php
+use InterNACHI\Modular\Plugins\Attributes\AfterResolving;
+use Illuminate\View\Factory as ViewFactory;
+
+#[AfterResolving(ViewFactory::class, parameter: 'factory')]
+class ViewPlugin extends Plugin
+{
+    public function __construct(
+        protected ViewFactory $factory,
+    ) {}
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return $finders
+            ->viewDirectoryFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $dir) => [
+                'namespace' => $dir->module()->name,
+                'path' => $dir->getRealPath(),
+            ]);
+    }
+    
+    public function handle(Collection $data)
+    {
+        $data->each(fn(array $d) => $this->factory->addNamespace($d['namespace'], $d['path']));
+    }
+}
+```
+
+<Note>
+  The `parameter` argument specifies how the resolved service is injected into the plugin's constructor.
+</Note>
+
+## Plugin Registry
+
+The `PluginRegistry` manages all registered plugins:
+
+```php
+class PluginRegistry
+{
+    protected array $plugins = [];
+    
+    // Register plugins
+    public function add(string ...$class): static
+    {
+        foreach ($class as $plugin) {
+            $this->plugins[$plugin] ??= true;
+        }
+        return $this;
+    }
+    
+    // Get a plugin instance
+    public function get(string $plugin, array $parameters = []): Plugin
+    {
+        if (! array_key_exists($plugin, $this->plugins)) {
+            throw new InvalidArgumentException("The plugin '{$plugin}' has not been registered.");
+        }
+        
+        $plugin = $this->container->make($plugin, $parameters);
+        $this->container->instance($plugin::class, $plugin);
+        
+        return $plugin;
+    }
+    
+    // Get all registered plugin class names
+    public function all(): array
+    {
+        return array_keys($this->plugins);
+    }
+}
+```
+
+### Registering Plugins
+
+Plugins are registered in the service provider:
+
+```php
+protected function registerDefaultPlugins(): void
+{
+    $registry = $this->app->make(PluginRegistry::class);
+    
+    $registry->add(
+        ArtisanPlugin::class,
+        BladePlugin::class,
+        EventsPlugin::class,
+        GatePlugin::class,
+        MigratorPlugin::class,
+        ModulesPlugin::class,
+        RoutesPlugin::class,
+        TranslatorPlugin::class,
+        ViewPlugin::class,
+    );
+}
+```
+
+## Plugin Examples
+
+### Routes Plugin
+
+Loads route files from all modules:
+
+```php
+class RoutesPlugin extends Plugin
+{
+    public static function boot(Closure $handler, Application $app): void
+    {
+        if (! $app->routesAreCached()) {
+            $handler(static::class);
+        }
+    }
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return $finders
+            ->routeFileFinder()  // Finds *.php in */routes
+            ->values()
+            ->map(fn(SplFileInfo $file) => $file->getRealPath());
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(fn(string $filename) => require $filename);
+    }
+}
+```
+
+### Artisan Plugin
+
+Registers console commands from modules:
+
+```php
+class ArtisanPlugin extends Plugin
+{
+    public static function boot(Closure $handler, Application $app): void
+    {
+        Artisan::starting(fn($artisan) => $handler(static::class, ['artisan' => $artisan]));
+    }
+    
+    public function __construct(
+        protected Artisan $artisan,
+        protected ModuleRegistry $registry,
+    ) {}
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return $finders
+            ->commandFileFinder()  // Finds *.php in */src/Console/Commands
+            ->withModuleInfo()
+            ->values()
+            ->map(fn(ModuleFileInfo $file) => $file->fullyQualifiedClassName())
+            ->filter($this->isInstantiableCommand(...));
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(fn(string $fqcn) => $this->artisan->resolve($fqcn));
+        
+        $this->registerNamespacesInTinker();
+    }
+    
+    protected function isInstantiableCommand($command): bool
+    {
+        return is_subclass_of($command, Command::class)
+            && ! (new ReflectionClass($command))->isAbstract();
+    }
+}
+```
+
+<Warning>
+  The Artisan plugin filters out abstract commands to prevent instantiation errors.
+</Warning>
+
+### Gate Plugin
+
+Automatically maps policies to models:
+
+```php
+#[AfterResolving(Gate::class, parameter: 'gate')]
+class GatePlugin extends Plugin
+{
+    public function __construct(
+        protected Gate $gate
+    ) {}
+    
+    public function discover(FinderFactory $finders): iterable
+    {
+        return $finders
+            ->modelFileFinder()
+            ->withModuleInfo()
+            ->values()
+            ->map(function(ModuleFileInfo $file) {
+                $fqcn = $file->fullyQualifiedClassName();
+                $namespace = rtrim($file->module()->namespaces->first(), '\\');
+                
+                $candidates = [
+                    $namespace.'\\Policies\\'.Str::after($fqcn, 'Models\\').'Policy',
+                    $namespace.'\\Policies\\'.Str::afterLast($fqcn, '\\').'Policy',
+                ];
+                
+                foreach ($candidates as $candidate) {
+                    if (class_exists($candidate)) {
+                        return [
+                            'fqcn' => $fqcn,
+                            'policy' => $candidate,
+                        ];
+                    }
+                }
+                
+                return null;
+            })
+            ->filter();
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(fn(array $row) => $this->gate->policy($row['fqcn'], $row['policy']));
+    }
+}
+```
+
+### Events Plugin
+
+Auto-discovers event listeners:
+
+```php
+#[AfterResolving(Dispatcher::class, parameter: 'events')]
+class EventsPlugin extends Plugin
+{
+    public function __construct(
+        protected Application $app,
+        protected Dispatcher $events,
+        protected Repository $config,
+    ) {}
+    
+    public function discover(FinderFactory $finders): array
+    {
+        if (! $this->shouldDiscoverEvents()) {
+            return [];
+        }
+        
+        return $finders
+            ->listenerDirectoryFinder()
+            ->withModuleInfo()
+            ->reduce(fn(array $discovered, ModuleFileInfo $file) => array_merge_recursive(
+                $discovered,
+                DiscoverEvents::within($file->getPathname(), $file->module()->path('src'))
+            ), []);
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(function(array $listeners, string $event) {
+            foreach (array_unique($listeners, SORT_REGULAR) as $listener) {
+                $this->events->listen($event, $listener);
+            }
+        });
+    }
+}
+```
+
+## Plugin Data Repository
+
+The `PluginDataRepository` manages plugin discovery data and caching:
+
+```php
+class PluginDataRepository
+{
+    public function __construct(
+        protected array $data,              // Cached data
+        protected PluginRegistry $registry,  // Plugin registry
+        protected FinderFactory $finders,    // File finders
+    ) {}
+    
+    // Get data for a specific plugin
+    public function get(string $name): Collection
+    {
+        $this->data[$name] ??= $this->registry->get($name)->discover($this->finders);
+        
+        return collect($this->data[$name]);
+    }
+    
+    // Get all plugin data (triggers discovery for all)
+    public function all(): array
+    {
+        foreach ($this->registry->all() as $plugin) {
+            $this->get($plugin);
+        }
+        
+        return $this->data;
+    }
+}
+```
+
+<Info>
+  Plugin data is lazily loaded - discovery only runs when the data is first accessed.
+</Info>
+
+## Creating Custom Plugins
+
+You can create custom plugins for your own needs:
+
+```php
+namespace App\Plugins;
+
+use Illuminate\Support\Collection;
+use InterNACHI\Modular\Plugins\Plugin;
+use InterNACHI\Modular\Support\FinderFactory;
+
+class ConfigPlugin extends Plugin
+{
+    public function discover(FinderFactory $finders): iterable
+    {
+        return FinderCollection::forFiles()
+            ->name('*.php')
+            ->inOrEmpty($finders->base_path.'/*/config')
+            ->values()
+            ->map(fn($file) => [
+                'key' => pathinfo($file->getFilename(), PATHINFO_FILENAME),
+                'path' => $file->getRealPath(),
+            ]);
+    }
+    
+    public function handle(Collection $data): void
+    {
+        $data->each(function(array $config) {
+            config([$config['key'] => require $config['path']]);
+        });
+    }
+}
+```
+
+### Registering Custom Plugins
+
+Register in your `AppServiceProvider`:
+
+```php
+use InterNACHI\Modular\PluginRegistry;
+use App\Plugins\ConfigPlugin;
+
+public function register()
+{
+    PluginRegistry::register(ConfigPlugin::class);
+}
+```
+
+<Note>
+  Custom plugins follow the same lifecycle and caching behavior as built-in plugins.
+</Note>
+
+## Plugin Handler
+
+The `PluginHandler` orchestrates plugin execution:
+
+```php
+class PluginHandler
+{
+    public function __construct(
+        protected PluginRegistry $registry,
+        protected PluginDataRepository $data,
+    ) {}
+    
+    // Boot all plugins
+    public function boot(Application $app): void
+    {
+        foreach ($this->registry->all() as $class) {
+            $class::boot($this->handle(...), $app);
+        }
+    }
+    
+    // Execute a specific plugin
+    public function handle(string $name, array $parameters = []): mixed
+    {
+        return $this->registry->get($name, $parameters)->handle($this->data->get($name));
+    }
+}
+```
+
+## Boot Attributes Interface
+
+All boot attributes implement the `HandlesBoot` interface:
+
+```php
+interface HandlesBoot
+{
+    public function boot(string $plugin, Closure $handler, Application $app);
+}
+```
+
+### OnBoot Implementation
+
+```php
+#[Attribute(Attribute::TARGET_CLASS)]
+class OnBoot implements HandlesBoot
+{
+    public function boot(string $plugin, Closure $handler, Application $app)
+    {
+        $handler($plugin);
+    }
+}
+```
+
+### AfterResolving Implementation
+
+```php
+#[Attribute(Attribute::TARGET_CLASS)]
+class AfterResolving implements HandlesBoot
+{
+    public function __construct(
+        public string $abstract,
+        public string $parameter,
+    ) {}
+    
+    public function boot(string $plugin, Closure $handler, Application $app)
+    {
+        $app->afterResolving($this->abstract, fn($resolved) => $handler($plugin, [$this->parameter => $resolved]));
+        
+        if ($app->resolved($this->abstract)) {
+            $handler($plugin);
+        }
+    }
+}
+```
+
+<Info>
+  You can create custom boot attributes by implementing the `HandlesBoot` interface.
+</Info>

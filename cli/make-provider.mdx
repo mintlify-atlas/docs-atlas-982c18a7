@@ -1,0 +1,498 @@
+---
+title: 'make:provider'
+description: 'Generate service provider classes within your modules'
+---
+
+## Command
+
+```bash
+php artisan make:provider {name} --module={module}
+```
+
+Create a new service provider class in your module's `src/Providers` directory.
+
+## Parameters
+
+<ParamField path="name" type="string" required>
+  The name of the provider class
+  
+  **Conventions:**
+  - Use PascalCase
+  - End with "ServiceProvider" or "Provider"
+  
+  **Examples:**
+  - `BlogServiceProvider`
+  - `RepositoryServiceProvider`
+  - `EventServiceProvider`
+</ParamField>
+
+## Options
+
+<ParamField path="--module" type="string" required>
+  The name of the module where the provider should be created
+  
+  **Example:** `--module=blog`
+</ParamField>
+
+## Examples
+
+### Basic Service Provider
+
+```bash
+php artisan make:provider BlogServiceProvider --module=blog
+```
+
+Generates a service provider:
+
+```php
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    /**
+     * Register services.
+     */
+    public function register(): void
+    {
+        //
+    }
+
+    /**
+     * Bootstrap services.
+     */
+    public function boot(): void
+    {
+        //
+    }
+}
+```
+
+**Location:** `app-modules/blog/src/Providers/BlogServiceProvider.php`
+
+### Repository Service Provider
+
+```bash
+php artisan make:provider RepositoryServiceProvider --module=blog
+```
+
+Customize it to bind interfaces to implementations:
+
+```php
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Modules\Blog\Contracts\PostRepositoryInterface;
+use Modules\Blog\Repositories\PostRepository;
+
+class RepositoryServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->bind(
+            PostRepositoryInterface::class,
+            PostRepository::class
+        );
+    }
+}
+```
+
+### Route Service Provider
+
+```bash
+php artisan make:provider RouteServiceProvider --module=blog
+```
+
+Customize it to load module routes:
+
+```php
+namespace Modules\Blog\Providers;
+
+use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Route;
+
+class RouteServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        $this->routes(function () {
+            Route::middleware('web')
+                ->group(__DIR__.'/../../routes/web.php');
+
+            Route::middleware('api')
+                ->prefix('api')
+                ->group(__DIR__.'/../../routes/api.php');
+        });
+    }
+}
+```
+
+### Event Service Provider
+
+```bash
+php artisan make:provider EventServiceProvider --module=blog
+```
+
+Customize it to register event listeners:
+
+```php
+namespace Modules\Blog\Providers;
+
+use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Modules\Blog\Events\PostPublished;
+use Modules\Blog\Listeners\SendPostNotification;
+
+class EventServiceProvider extends ServiceProvider
+{
+    protected $listen = [
+        PostPublished::class => [
+            SendPostNotification::class,
+        ],
+    ];
+
+    public function boot(): void
+    {
+        //
+    }
+}
+```
+
+## Module-Specific Behavior
+
+### Simple Implementation
+
+The `MakeProvider` command uses the `ModularizeGeneratorCommand` trait without any custom overrides:
+
+```php MakeProvider.php:1-12
+namespace InterNACHI\Modular\Console\Commands\Make;
+
+use Illuminate\Foundation\Console\ProviderMakeCommand;
+use InterNACHI\Modularize\ModularizeGeneratorCommand;
+
+class MakeProvider extends ProviderMakeCommand
+{
+    use ModularizeGeneratorCommand;
+}
+```
+
+This means the command:
+1. Uses Laravel's standard provider generation
+2. Adjusts the namespace to your module
+3. Places the file in your module's `src/Providers` directory
+
+<Note>
+  Service providers follow the standard Laravel implementation with only namespace and path adjustments for modules.
+</Note>
+
+## Common Provider Patterns
+
+### Binding Interfaces
+
+Register service container bindings:
+
+```php
+public function register(): void
+{
+    $this->app->singleton(CacheInterface::class, RedisCache::class);
+    
+    $this->app->bind(PaymentGateway::class, function ($app) {
+        return new StripeGateway(
+            config('services.stripe.key')
+        );
+    });
+}
+```
+
+### Loading Configuration
+
+Publish and merge module configuration:
+
+```php
+public function register(): void
+{
+    $this->mergeConfigFrom(
+        __DIR__.'/../../config/blog.php',
+        'blog'
+    );
+}
+
+public function boot(): void
+{
+    $this->publishes([
+        __DIR__.'/../../config/blog.php' => config_path('blog.php'),
+    ], 'blog-config');
+}
+```
+
+### Loading Views
+
+Register view namespaces:
+
+```php
+public function boot(): void
+{
+    $this->loadViewsFrom(
+        __DIR__.'/../../resources/views',
+        'blog'
+    );
+    
+    $this->publishes([
+        __DIR__.'/../../resources/views' => resource_path('views/vendor/blog'),
+    ], 'blog-views');
+}
+```
+
+### Loading Translations
+
+Register translation files:
+
+```php
+public function boot(): void
+{
+    $this->loadTranslationsFrom(
+        __DIR__.'/../../resources/lang',
+        'blog'
+    );
+    
+    $this->publishes([
+        __DIR__.'/../../resources/lang' => lang_path('vendor/blog'),
+    ], 'blog-translations');
+}
+```
+
+### Loading Migrations
+
+Register module migrations:
+
+```php
+public function boot(): void
+{
+    $this->loadMigrationsFrom(
+        __DIR__.'/../../database/migrations'
+    );
+}
+```
+
+### Registering Commands
+
+Register Artisan commands:
+
+```php
+public function boot(): void
+{
+    if ($this->app->runningInConsole()) {
+        $this->commands([
+            \Modules\Blog\Console\Commands\PublishPost::class,
+            \Modules\Blog\Console\Commands\ImportPosts::class,
+        ]);
+    }
+}
+```
+
+### Registering Policies
+
+Register authorization policies:
+
+```php
+use Illuminate\Support\Facades\Gate;
+use Modules\Blog\Models\Post;
+use Modules\Blog\Policies\PostPolicy;
+
+public function boot(): void
+{
+    Gate::policy(Post::class, PostPolicy::class);
+}
+```
+
+### Registering Middleware
+
+Register route middleware:
+
+```php
+use Illuminate\Routing\Router;
+use Modules\Blog\Http\Middleware\CheckPostOwnership;
+
+public function boot(): void
+{
+    $router = $this->app->make(Router::class);
+    $router->aliasMiddleware('post.owner', CheckPostOwnership::class);
+}
+```
+
+## Registering Your Provider
+
+### Automatic Discovery
+
+Laravel automatically discovers service providers in modules through package discovery. Add to your module's `composer.json`:
+
+```json composer.json
+{
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Blog\\Providers\\BlogServiceProvider"
+            ]
+        }
+    }
+}
+```
+
+### Manual Registration
+
+Alternatively, register in `config/app.php`:
+
+```php config/app.php
+'providers' => [
+    // Other providers...
+    
+    Modules\Blog\Providers\BlogServiceProvider::class,
+],
+```
+
+<Tip>
+  Use package discovery (composer.json) for better module portability.
+</Tip>
+
+## Service Provider Lifecycle
+
+### Registration Phase
+
+The `register()` method is called first for all providers:
+
+```php
+public function register(): void
+{
+    // Bind services to the container
+    // Register singletons
+    // Merge configuration
+}
+```
+
+<Note>
+  Only bind services in `register()`. Don't access any services here as they may not be available yet.
+</Note>
+
+### Boot Phase
+
+The `boot()` method is called after all providers are registered:
+
+```php
+public function boot(): void
+{
+    // Load routes, views, migrations
+    // Publish assets
+    // Register commands
+    // Use other services
+}
+```
+
+### Deferred Providers
+
+Defer loading until services are needed:
+
+```php
+use Illuminate\Contracts\Support\DeferrableProvider;
+
+class RepositoryServiceProvider extends ServiceProvider implements DeferrableProvider
+{
+    public function register(): void
+    {
+        $this->app->singleton(PostRepository::class);
+    }
+
+    public function provides(): array
+    {
+        return [PostRepository::class];
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+
+<Accordion title="Separate concerns" icon="diagram-project">
+  Create multiple focused providers instead of one large provider:
+  
+  - `RepositoryServiceProvider` - Repository bindings
+  - `EventServiceProvider` - Event listeners
+  - `RouteServiceProvider` - Route loading
+  - `ViewServiceProvider` - View composers and components
+</Accordion>
+
+<Accordion title="Use register() for bindings only" icon="handshake">
+  Only bind services to the container in `register()`:
+  
+  ```php
+  // Good
+  public function register(): void
+  {
+      $this->app->singleton(MyService::class);
+  }
+  
+  // Bad - don't use other services here
+  public function register(): void
+  {
+      $service = $this->app->make(OtherService::class);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Defer when possible" icon="clock">
+  Implement `DeferrableProvider` for services that aren't always needed:
+  
+  ```php
+  class RepositoryServiceProvider extends ServiceProvider implements DeferrableProvider
+  {
+      public function provides(): array
+      {
+          return [PostRepository::class];
+      }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Document published assets" icon="book">
+  Add comments documenting what can be published:
+  
+  ```php
+  public function boot(): void
+  {
+      // Publish with: php artisan vendor:publish --tag=blog-config
+      $this->publishes([
+          __DIR__.'/../../config/blog.php' => config_path('blog.php'),
+      ], 'blog-config');
+  }
+  ```
+</Accordion>
+
+</AccordionGroup>
+
+## Testing Service Providers
+
+Test that your provider correctly registers services:
+
+```php
+namespace Modules\Blog\Tests;
+
+use Modules\Blog\Contracts\PostRepositoryInterface;
+use Modules\Blog\Repositories\PostRepository;
+use Tests\TestCase;
+
+class RepositoryServiceProviderTest extends TestCase
+{
+    public function test_it_binds_post_repository(): void
+    {
+        $repository = $this->app->make(PostRepositoryInterface::class);
+        
+        $this->assertInstanceOf(PostRepository::class, $repository);
+    }
+}
+```
+
+## See Also
+
+- [Laravel Service Providers Documentation](https://laravel.com/docs/providers)
+- [Service Container Documentation](https://laravel.com/docs/container)
+- [Package Development Documentation](https://laravel.com/docs/packages)
