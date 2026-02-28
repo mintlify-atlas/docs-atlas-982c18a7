@@ -1,0 +1,271 @@
+---
+title: db:seed
+description: Run database seeders with the --module option
+---
+
+## Overview
+
+The `db:seed` command has been extended with a `--module` option, allowing you to run seeders from a specific module's namespace.
+
+## Syntax
+
+```bash
+php artisan db:seed [options]
+```
+
+## Options
+
+<ParamField path="--module" type="string">
+  The name of the module where the seeder resides
+</ParamField>
+
+<ParamField path="--class" type="string">
+  The class name of the root seeder (defaults to `DatabaseSeeder`)
+</ParamField>
+
+<ParamField path="--database" type="string">
+  The database connection to use
+</ParamField>
+
+<ParamField path="--force" type="boolean">
+  Force the operation to run when in production
+</ParamField>
+
+## Usage
+
+### Run Module's Default Seeder
+
+Run the `DatabaseSeeder` from a specific module:
+
+```bash
+php artisan db:seed --module=blog
+```
+
+This will call `Modules\Blog\Database\Seeders\DatabaseSeeder`.
+
+### Run Specific Seeder from Module
+
+Specify both the module and seeder class name:
+
+```bash
+php artisan db:seed --module=blog --class=PostSeeder
+```
+
+This will call `Modules\Blog\Database\Seeders\PostSeeder`.
+
+### Run Application Seeder
+
+Without the `--module` option, it works like the standard Laravel command:
+
+```bash
+php artisan db:seed
+```
+
+## How It Works
+
+The command automatically qualifies the seeder class name with the module's namespace:
+
+```php
+protected function getSeeder()
+{
+    if ($module = $this->module()) {
+        $default = $this->getDefinition()->getOption('class')->getDefault();
+        $class = $this->input->getOption('class');
+        
+        if ($class === $default) {
+            // Use module's DatabaseSeeder
+            $class = $module->qualify($default);
+        } elseif (! Str::contains($class, 'Database\\Seeders')) {
+            // Qualify the class with module namespace
+            $class = $module->qualify("Database\\Seeders\\{$class}");
+        }
+        
+        return $this->laravel->make($class)
+            ->setContainer($this->laravel)
+            ->setCommand($this);
+    }
+    
+    return parent::getSeeder();
+}
+```
+
+## Module Seeder Structure
+
+### Directory Structure
+
+```
+app-modules/
+  blog/
+    database/
+      seeders/
+        DatabaseSeeder.php
+        PostSeeder.php
+        CategorySeeder.php
+```
+
+### Example DatabaseSeeder
+
+```php
+<?php
+
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $this->call([
+            CategorySeeder::class,
+            PostSeeder::class,
+        ]);
+    }
+}
+```
+
+### Example PostSeeder
+
+```php
+<?php
+
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Modules\Blog\Models\Post;
+
+class PostSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Post::factory()->count(50)->create();
+    }
+}
+```
+
+## Calling Seeders Within Modules
+
+When calling other seeders from within a module seeder, use the fully qualified class name or relative reference:
+
+```php
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Using fully qualified class names
+        $this->call([
+            \Modules\Blog\Database\Seeders\CategorySeeder::class,
+            \Modules\Blog\Database\Seeders\PostSeeder::class,
+        ]);
+        
+        // Or use relative class names (same namespace)
+        $this->call([
+            CategorySeeder::class,
+            PostSeeder::class,
+        ]);
+    }
+}
+```
+
+## Examples
+
+### Seed Multiple Modules
+
+```bash
+# Seed blog module
+php artisan db:seed --module=blog
+
+# Seed user module
+php artisan db:seed --module=user-management
+
+# Seed products module with specific seeder
+php artisan db:seed --module=products --class=ProductSeeder
+```
+
+### Production Seeding
+
+Use the `--force` flag to seed in production:
+
+```bash
+php artisan db:seed --module=blog --force
+```
+
+### Specify Database Connection
+
+```bash
+php artisan db:seed --module=blog --database=mysql_secondary
+```
+
+## Using with Factories
+
+Module seeders work seamlessly with module factories:
+
+```php
+namespace Modules\Blog\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Modules\Blog\Models\Post;
+use Modules\Blog\Models\Category;
+
+class PostSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Create categories first
+        $categories = Category::factory()->count(5)->create();
+        
+        // Create posts with random categories
+        Post::factory()
+            ->count(50)
+            ->recycle($categories)
+            ->create();
+    }
+}
+```
+
+## Workflow Integration
+
+### Development
+
+```bash
+# Reset and seed in one command
+php artisan migrate:fresh --seed --module=blog
+```
+
+### Testing
+
+Call seeders in your tests:
+
+```php
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class BlogTest extends TestCase
+{
+    use RefreshDatabase;
+    
+    public function test_blog_posts(): void
+    {
+        $this->artisan('db:seed', [
+            '--module' => 'blog',
+            '--class' => 'PostSeeder',
+        ]);
+        
+        $this->assertDatabaseCount('posts', 50);
+    }
+}
+```
+
+<Tip>
+Organize your module seeders by feature or entity type. Use the main `DatabaseSeeder` to orchestrate the seeding order.
+</Tip>
+
+## See Also
+
+- [Module Factories](/guides/module-factories) - Creating model factories
+- [Module Migrations](/guides/module-migrations) - Database migrations
+- [Laravel Seeding Documentation](https://laravel.com/docs/seeding)

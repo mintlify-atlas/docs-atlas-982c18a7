@@ -1,0 +1,221 @@
+---
+title: Modules plugin
+description: Core plugin that discovers and loads all modules
+---
+
+## Overview
+
+The `ModulesPlugin` is the foundational plugin that discovers all modules in your application. It scans the modules directory, reads each module's `composer.json` file, and creates `ModuleConfig` instances that are used throughout the system.
+
+## How It Works
+
+This plugin is responsible for the initial module discovery phase. All other plugins depend on the modules that this plugin discovers.
+
+### Discovery Process
+
+1. **Scan Directory**: Looks in the configured modules directory (default: `app-modules/`)
+2. **Read Composer Files**: Reads each module's `composer.json` for PSR-4 autoload configuration
+3. **Extract Metadata**: Extracts the module name, base path, and namespaces
+4. **Create Configs**: Creates `ModuleConfig` instances for each module
+
+### Source Code
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->moduleComposerFileFinder()
+        ->values()
+        ->mapWithKeys(function(SplFileInfo $file) {
+            $composer_config = json_decode($file->getContents(), true, 16, JSON_THROW_ON_ERROR);
+            $base_path = rtrim(str_replace('\\\\', '/', $file->getPath()), '/');
+            $name = basename($base_path);
+            
+            return [
+                $name => [
+                    'name' => $name,
+                    'base_path' => $base_path,
+                    'namespaces' => Collection::make($composer_config['autoload']['psr-4'] ?? [])
+                        ->mapWithKeys(fn($src, $namespace) => ["{$base_path}/{$src}" => $namespace])
+                        ->all(),
+                ],
+            ];
+        });
+}
+```
+
+### Handling Phase
+
+The handling phase converts the discovered data into `ModuleConfig` objects:
+
+```php
+public function handle(Collection $data): Collection
+{
+    return $data->map(fn(array $d) => new ModuleConfig(
+        $d['name'],
+        $d['base_path'],
+        new Collection($d['namespaces'])
+    ));
+}
+```
+
+## Expected Module Structure
+
+Each module must have a `composer.json` file with PSR-4 autoload configuration:
+
+```
+app-modules/
+  blog/
+    composer.json          # Required
+    src/
+    tests/
+    routes/
+    resources/
+```
+
+### Example composer.json
+
+```json
+{
+    "name": "modules/blog",
+    "type": "library",
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Blog\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Blog\\Providers\\BlogServiceProvider"
+            ]
+        }
+    }
+}
+```
+
+## What Gets Discovered
+
+For each module, the plugin extracts:
+
+- **Name**: The directory name (e.g., `blog`, `user-management`)
+- **Base Path**: Absolute path to the module directory
+- **Namespaces**: PSR-4 namespace mappings from `composer.json`
+
+### Multiple Namespace Support
+
+Modules can define multiple PSR-4 namespaces:
+
+```json
+{
+    "autoload": {
+        "psr-4": {
+            "Modules\\Blog\\": "src/",
+            "Database\\Blog\\": "database/"
+        }
+    }
+}
+```
+
+## ModuleConfig Class
+
+The plugin returns a collection of `ModuleConfig` instances:
+
+```php
+class ModuleConfig
+{
+    public function __construct(
+        public readonly string $name,
+        public readonly string $base_path,
+        public readonly Collection $namespaces,
+    ) {}
+}
+```
+
+## Integration with Other Plugins
+
+All other plugins receive module information from this plugin:
+
+1. **ModulesPlugin** discovers modules
+2. Modules are stored in the registry
+3. Other plugins query the registry to find module-specific resources:
+   - `ArtisanPlugin` finds commands in discovered modules
+   - `BladePlugin` finds components in discovered modules
+   - `RoutesPlugin` finds route files in discovered modules
+   - And so on...
+
+## Module Registry
+
+The discovered modules are stored in the `ModuleRegistry`:
+
+```php
+// Access all modules
+$modules = app(ModuleRegistry::class)->modules();
+
+// Access specific module
+$blog = app(ModuleRegistry::class)->module('blog');
+
+// Get module by path
+$module = app(ModuleRegistry::class)->moduleForPath('/path/to/file.php');
+
+// Using the facade
+use InterNACHI\Modular\Support\Facades\Modules;
+
+$modules = Modules::modules();
+$blog = Modules::module('blog');
+```
+
+## Caching
+
+Module discovery can be cached for production:
+
+```bash
+# Cache discovered modules
+php artisan modules:cache
+
+# Clear module cache
+php artisan modules:clear
+```
+
+When cached, the plugin reads from the cache file instead of scanning directories.
+
+<Info>
+The ModulesPlugin is always the first plugin to run, as all other plugins depend on knowing which modules exist.
+</Info>
+
+## Troubleshooting
+
+### Module Not Discovered
+
+If a module isn't being discovered:
+
+1. **Check composer.json exists** in the module directory
+2. **Verify PSR-4 autoload** is configured
+3. **Clear cache**: `php artisan modules:clear`
+4. **Check directory structure** matches configured path
+
+### Namespace Resolution Issues
+
+If classes aren't being found:
+
+1. **Run composer update** to update autoloader
+2. **Check PSR-4 mapping** matches actual directory structure
+3. **Verify namespace** in PHP files matches composer.json
+
+```bash
+# Update composer autoloader
+composer update modules/blog
+
+# Dump autoloader
+composer dump-autoload
+```
+
+## See Also
+
+- [ModuleRegistry](/api/module-registry) - Accessing discovered modules
+- [ModuleConfig](/api/module-config) - Module configuration object
+- [Module Architecture](/concepts/architecture) - How module discovery works
+- [Creating Modules](/guides/creating-modules) - Setting up new modules

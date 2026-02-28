@@ -1,0 +1,170 @@
+---
+title: Gate plugin
+description: Automatic policy registration for module models
+---
+
+## Overview
+
+The `GatePlugin` automatically discovers and registers authorization policies for your module's Eloquent models. It follows Laravel's policy naming conventions to match models with their corresponding policy classes.
+
+## How It Works
+
+The plugin scans your module's `Models` directory and attempts to locate corresponding policy classes using Laravel's standard naming conventions.
+
+### Discovery Process
+
+1. **Find Models**: Scans the module's model files
+2. **Locate Policies**: For each model, searches for policies in two locations:
+   - Same nested structure: `Policies\Foo\BarPolicy` for `Models\Foo\Bar`
+   - Flat structure: `Policies\BarPolicy` for `Models\Foo\Bar`
+3. **Register**: Registers the policy with Laravel's Gate
+
+### Source Code
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->modelFileFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(function(ModuleFileInfo $file) {
+            $fqcn = $file->fullyQualifiedClassName();
+            $namespace = rtrim($file->module()->namespaces->first(), '\\');
+            
+            $candidates = [
+                $namespace.'\\Policies\\'.Str::after($fqcn, 'Models\\').'Policy',
+                $namespace.'\\Policies\\'.Str::afterLast($fqcn, '\\').'Policy',
+            ];
+            
+            foreach ($candidates as $candidate) {
+                if (class_exists($candidate)) {
+                    return [
+                        'fqcn' => $fqcn,
+                        'policy' => $candidate,
+                    ];
+                }
+            }
+            
+            return null;
+        })
+        ->filter();
+}
+```
+
+## Expected Module Structure
+
+```
+app-modules/
+  blog/
+    src/
+      Models/
+        Post.php              # Modules\Blog\Models\Post
+        Comment.php           # Modules\Blog\Models\Comment
+      Policies/
+        PostPolicy.php        # Modules\Blog\Policies\PostPolicy
+        CommentPolicy.php     # Modules\Blog\Policies\CommentPolicy
+```
+
+### Nested Models
+
+For nested models, the plugin checks both patterns:
+
+```
+app-modules/
+  blog/
+    src/
+      Models/
+        Admin/
+          User.php            # Modules\Blog\Models\Admin\User
+      Policies/
+        Admin/
+          UserPolicy.php      # Option 1: Nested policy
+        UserPolicy.php        # Option 2: Flat policy
+```
+
+## Activation
+
+The plugin uses the `AfterResolving` attribute to activate after Laravel's Gate is resolved:
+
+```php
+#[AfterResolving(Gate::class, parameter: 'gate')]
+class GatePlugin extends Plugin
+{
+    public function __construct(
+        protected Gate $gate
+    ) {
+    }
+}
+```
+
+## Policy Registration
+
+Policies are registered with Laravel's Gate during the handling phase:
+
+```php
+public function handle(Collection $data): void
+{
+    $data->each(fn(array $row) => $this->gate->policy($row['fqcn'], $row['policy']));
+}
+```
+
+## Usage Example
+
+Once policies are registered, use them like any Laravel policy:
+
+```php
+use Modules\Blog\Models\Post;
+
+// In a controller
+public function update(Post $post)
+{
+    $this->authorize('update', $post);
+    
+    // Update the post...
+}
+
+// In Blade
+@can('update', $post)
+    <a href="{{ route('posts.edit', $post) }}">Edit</a>
+@endcan
+
+// Using the Gate facade
+if (Gate::allows('update', $post)) {
+    // User can update the post
+}
+```
+
+## Policy Class Example
+
+```php
+<?php
+
+namespace Modules\Blog\Policies;
+
+use App\Models\User;
+use Modules\Blog\Models\Post;
+
+class PostPolicy
+{
+    public function update(User $user, Post $post): bool
+    {
+        return $user->id === $post->user_id;
+    }
+    
+    public function delete(User $user, Post $post): bool
+    {
+        return $user->id === $post->user_id;
+    }
+}
+```
+
+<Info>
+The GatePlugin follows Laravel's standard policy auto-discovery conventions, making authorization seamless across your modular application.
+</Info>
+
+## See Also
+
+- [Laravel Authorization Documentation](https://laravel.com/docs/authorization)
+- [Module Components](/guides/module-components) - Creating models and policies
+- [Auto-Discovery](/advanced/auto-discovery) - How automatic discovery works

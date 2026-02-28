@@ -80,7 +80,8 @@
               "cli/modules-list",
               "cli/modules-cache",
               "cli/modules-clear",
-              "cli/modules-sync"
+              "cli/modules-sync",
+              "cli/db-seed"
             ]
           },
           {
@@ -111,12 +112,15 @@
           {
             "group": "Plugins",
             "pages": [
+              "api/plugins/modules-plugin",
               "api/plugins/artisan-plugin",
               "api/plugins/blade-plugin",
               "api/plugins/events-plugin",
+              "api/plugins/gate-plugin",
               "api/plugins/migrator-plugin",
               "api/plugins/routes-plugin",
-              "api/plugins/translator-plugin"
+              "api/plugins/translator-plugin",
+              "api/plugins/view-plugin"
             ]
           }
         ]

@@ -1,0 +1,192 @@
+---
+title: View plugin
+description: Automatic view namespace registration for module templates
+---
+
+## Overview
+
+The `ViewPlugin` automatically registers view namespaces for your modules, allowing you to reference module views using the `module-name::view.name` syntax.
+
+## How It Works
+
+The plugin discovers the `resources/views` directory in each module and registers it as a view namespace with Laravel's view factory.
+
+### Discovery Process
+
+1. **Find View Directories**: Locates `resources/views` directories in all modules
+2. **Register Namespaces**: Registers each directory with the module's name as the namespace
+3. **Integration**: Works seamlessly with Laravel's view system
+
+### Source Code
+
+```php
+public function discover(FinderFactory $finders): iterable
+{
+    return $finders
+        ->viewDirectoryFinder()
+        ->withModuleInfo()
+        ->values()
+        ->map(fn(ModuleFileInfo $dir) => [
+            'namespace' => $dir->module()->name,
+            'path' => $dir->getRealPath(),
+        ]);
+}
+
+public function handle(Collection $data)
+{
+    $data->each(fn(array $d) => $this->factory->addNamespace($d['namespace'], $d['path']));
+}
+```
+
+## Expected Module Structure
+
+```
+app-modules/
+  blog/
+    resources/
+      views/
+        posts/
+          index.blade.php
+          show.blade.php
+          create.blade.php
+        layouts/
+          app.blade.php
+```
+
+## Activation
+
+The plugin uses the `AfterResolving` attribute to activate after Laravel's view factory is resolved:
+
+```php
+#[AfterResolving(ViewFactory::class, parameter: 'factory')]
+class ViewPlugin extends Plugin
+{
+    public function __construct(
+        protected ViewFactory $factory,
+    ) {
+    }
+}
+```
+
+## Usage Examples
+
+### Rendering Views
+
+```php
+// In a controller
+public function index()
+{
+    return view('blog::posts.index', [
+        'posts' => Post::all(),
+    ]);
+}
+
+// Return specific view
+public function show(Post $post)
+{
+    return view('blog::posts.show', compact('post'));
+}
+```
+
+### In Blade Templates
+
+```blade
+{{-- Include a module view --}}
+@include('blog::posts.card', ['post' => $post])
+
+{{-- Extend a module layout --}}
+@extends('blog::layouts.app')
+
+@section('content')
+    <h1>Blog Post</h1>
+@endsection
+
+{{-- Use view composer --}}
+@each('blog::posts.card', $posts, 'post')
+```
+
+### In Routes
+
+```php
+Route::get('/posts', function () {
+    return view('blog::posts.index');
+});
+
+Route::view('/about', 'blog::pages.about');
+```
+
+### Checking View Existence
+
+```php
+if (view()->exists('blog::posts.custom')) {
+    return view('blog::posts.custom');
+}
+
+return view('blog::posts.default');
+```
+
+## View Namespace Priority
+
+When a view is requested, Laravel checks:
+
+1. Module's `resources/views` directory (registered by this plugin)
+2. Application's `resources/views/vendor/{module}` directory (for customization)
+
+This allows you to override module views in your main application:
+
+```
+resources/
+  views/
+    vendor/
+      blog/
+        posts/
+          index.blade.php  # Overrides module's index view
+```
+
+## Integration with Blade Components
+
+Module views work alongside Blade components. The `BladePlugin` handles component registration separately:
+
+```blade
+{{-- Use a module's traditional view --}}
+@include('blog::posts.card')
+
+{{-- Use a module's Blade component --}}
+<x-blog::post-card :post="$post" />
+```
+
+<Note>
+View namespaces are registered automatically when modules are discovered. No manual configuration is required.
+</Note>
+
+## View Composers
+
+You can register view composers for module views in your module's service provider:
+
+```php
+namespace Modules\Blog\Providers;
+
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
+use Modules\Blog\View\Composers\PostComposer;
+
+class BlogServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        // Compose specific view
+        View::composer('blog::posts.index', PostComposer::class);
+        
+        // Compose all views in namespace
+        View::composer('blog::*', function ($view) {
+            $view->with('siteName', 'My Blog');
+        });
+    }
+}
+```
+
+## See Also
+
+- [Module Views](/guides/module-views) - Working with module views
+- [Blade Plugin](/api/plugins/blade-plugin) - Blade component registration
+- [Laravel Views Documentation](https://laravel.com/docs/views)
